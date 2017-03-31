@@ -9,7 +9,7 @@ setup(
     packages=find_packages(),
     # scripts=['say_hello.py'],
 
-    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'seaborn'],
+    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib'],
 
     # metadata
     author="Nikolaos Papadopoulos, Johannes Soeding",
