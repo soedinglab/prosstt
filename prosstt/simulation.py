@@ -291,6 +291,11 @@ def create_groups(K, G):
         Number of modules.
     G: int
         Number of genes.
+
+    Returns
+    -------
+    groups: list of ints
+        A list of the two modules to which each gene belongs.
     """
     genes = np.random.permutation(G)
     # we want each gene to appear in two groups, in average.
@@ -376,7 +381,7 @@ def simulate_branching_data(G, tree):
         Number of genes.
     tree: Tree object
         Contains information about the topology of the tree that is to be
-        simulated: the pseudotime units
+        simulated.
     """
     branches = tree.branches
     Ts = tree.time
@@ -410,7 +415,7 @@ def simulate_branching_data(G, tree):
     for b in tree.topology:
         Ms[b[1]] = bifurc_adjust(Ms[b[1]], Ms[b[0]])
 
-    return Ms, Ws
+    return Ms, Ws, Hs
 
 
 def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
@@ -622,7 +627,7 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
     # how many cells do we get from each time point?
     # we want to have ~N cells in the end, so divide N by the sample point size
     n_cells = int(n_factor * len(sample_times))
-    # we want n_factor cells at each sample 
+    # we want n_factor cells at each sample
     timestamps = np.repeat(sample_times, n_factor)
 
     return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,

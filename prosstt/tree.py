@@ -12,12 +12,13 @@ class Tree(object):
     def_time = 40
     def_comp = 15
 
-    def __init__(self, topology, time, branches, branch_points, modules):
+    def __init__(self, topology, time, branches, branch_points, modules, G):
         self.topology = topology
         self.time = time
         self.branches = branches
         self.branch_points = branch_points
         self.modules = modules
+        self.G = G
         self.means = None
 
     @classmethod
@@ -96,9 +97,10 @@ class Tree(object):
                    branches in the topology"
             raise ValueError(msg)
         for i, m in enumerate(Ms):
-            if not m.shape == (time[i], G):
+            if not m.shape == (self.time[i], self.G):
                 msg = "Branch " + str(i) + " was expected to have a shape " \
-                       + str((time[i], G)) + " and instead is " + str(m.shape)
+                      + str((self.time[i], self.G)) + " and instead is " \
+                      + str(m.shape)
                 raise ValueError(msg)
 
         self.means = Ms
@@ -107,14 +109,6 @@ class Tree(object):
         """
         Given the lengths of the branches calculate the maximum duration
         described by the tree.
-
-        Parameters
-        ----------
-        Ts: int array
-            The duration of the branches of the differentiation tree. It is
-            assumed that branches in the same timezone have identical length.
-        branch_points: int
-            The number of branch points of the differentiation tree.
 
         Returns
         -------
@@ -171,7 +165,7 @@ class Tree(object):
             rooted_paths = []
             root = [key]
             for v in treedict[key]:
-                usable = self.paths(v, treedict)
+                usable = self.paths(v)
                 for path in usable:
                     rooted_paths.append(root + path)
             return rooted_paths
@@ -196,9 +190,8 @@ class Tree(object):
             and 2 start at pseudotime 25 and branches 3,4 at pseudotime 50.
         """
         res = []
-        dtree = self.dictionify()
         ntime = np.array(self.time)
-        tpaths = self.paths(0, dtree)
+        tpaths = self.paths(0)
         stacks = [self.morph_stack(ntime[np.array(x)].tolist()) for x in tpaths]
 
         while stacks:
@@ -252,7 +245,7 @@ class Tree(object):
         """
         The pseudotime start and end of every branch in a path. Very similar to
         branch_times().
-        
+
         Parameters
         ----------
         stack: int array
