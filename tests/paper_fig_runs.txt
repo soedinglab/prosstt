@@ -1,0 +1,38 @@
+python ~/Documents/repos/hhtree/scripts/automate_rotation.py /home/npapado/Documents/repos/hhtree/src/tree_topology/ /home/npapado/Desktop/paper_slicer/lle_coords -e 5 --verbose -o /home/npapado/Desktop/paper_slicer/rotated_coords
+
+Endpoints: 5 1 529 306 445 531
+Branchpoints: 3 178 342 431
+Tree_Branch 1 178
+Tree_Branch 306 178
+Tree_Branch 178 342
+Tree_Branch 445 342
+Tree_Branch 342 431
+Tree_Branch 529 431
+Tree_Branch 531 431
+
+
+
+python ~/Documents/repos/hhtree/scripts/automate_rotation.py /home/npapado/Documents/repos/hhtree/src/tree_topology/ /home/npapado/Desktop/paper_hhtree/dm_coords -e 5 --verbose -o /home/npapado/Desktop/paper_hhtree/rotated_coords
+
+Endpoints: 5 0 528 306 427 594
+Branchpoints: 3 169 356 420
+Tree_Branch 0 169
+Tree_Branch 306 169
+Tree_Branch 169 356
+Tree_Branch 427 356
+Tree_Branch 356 420
+Tree_Branch 528 420
+Tree_Branch 594 420
+
+
+python ~/Documents/repos/hhtree/scripts/automate_rotation.py /home/npapado/Documents/repos/hhtree/src/tree_topology/ /home/npapado/Desktop/paper_mon/ddr_coords -e 5 --verbose -o /home/npapado/Desktop/paper_mon/rotated_coords
+
+Endpoints: 5 6 528 323 415 464
+Branchpoints: 3 178 336 413
+Tree_Branch 6 178
+Tree_Branch 323 178
+Tree_Branch 178 336
+Tree_Branch 415 336
+Tree_Branch 336 413
+Tree_Branch 464 413
+Tree_Branch 528 413

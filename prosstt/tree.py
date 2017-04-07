@@ -98,6 +98,7 @@ class Tree(object):
             raise ValueError(msg)
         for i, m in enumerate(Ms):
             if not m.shape == (self.time[i], self.G):
+                # TODO: use str format
                 msg = "Branch " + str(i) + " was expected to have a shape " \
                       + str((self.time[i], self.G)) + " and instead is " \
                       + str(m.shape)
