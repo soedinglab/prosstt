@@ -4,6 +4,7 @@
 import numpy as np
 import scipy as sp
 from scipy.special import gamma as Gamma
+from scipy import stats
 import random as rng
 import sys
 from collections import defaultdict
@@ -214,7 +215,7 @@ def simulate_W(T, K, cutoff=0.2, maxloops=100):
         Correlation above the cut-off will be considered too much. Should be
         between 0 and 1 but is not explicitly tested.
     maxloops: int, optional
-        The maximum number of times the method will try selfulating a new
+        The maximum number of times the method will try simulating a new
         diffusion process that doesn't correlate with all previous ones in W
         before resetting the matrix and starting over.
     """
@@ -332,7 +333,7 @@ def bifurc_adjust(Mu_bif, Mu):
     return Mu_bif
 
 
-def simulate_branching_data(G, tree):
+def simulate_branching_data(tree):
     """
     simulate the matrices that describe the branches of the differentiation
     tree.
@@ -377,12 +378,11 @@ def simulate_branching_data(G, tree):
 
     Parameters
     ----------
-    G: int
-        Number of genes.
     tree: Tree object
         Contains information about the topology of the tree that is to be
         simulated.
     """
+    G = tree.G
     branches = tree.branches
     Ts = tree.time
     Ks = tree.modules
@@ -435,7 +435,7 @@ def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
     a pipette, so we would expect slight imbalances in the number of cells at
     each time point.
 
-    The selfulation is structured exactly like that: a list of S sample times
+    The simulation is structured exactly like that: a list of S sample times
     marks the differentiation stages around which the cells are currently
     spread. We can control how high this spread is going to be (effectively
     controlling how synchronous the differentiation goes). We want to
@@ -447,7 +447,7 @@ def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
     describe how transcript counts are distributed. Sampling these
     distributions gives us a realistic cell.
 
-    Along the selfulation we can keep the information about the pseudotime of
+    Along the simulation we can keep the information about the pseudotime of
     each cell ("labels") as well as which branch each cell is assigned to
     ("branch").
 
@@ -513,7 +513,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
                          verbose=True):
     """
     Given the pseudotime labels of N cells, this function simulates an NxG
-    count matrix. Along the selfulation we can keep the information about the
+    count matrix. Along the simulation we can keep the information about the
     pseudotime of each cell ("labels") as well as which branch each cell is
     assigned to ("branch").
 
@@ -588,13 +588,13 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
 
-    This version of the selfulation function will sample all time points in
+    This version of the simulation function will sample all time points in
     "times" n_factor times. This is meant to aid in the development and
     debugging of the function, as it provides optimal conditions for a smooth
     tree in G-dimensional space, as it is easy to provide an array 1:T_max and
     make sure all possible time points are sampled.
 
-    Along the selfulation we can keep the information about the pseudotime of
+    Along the simulation we can keep the information about the pseudotime of
     each cell ("labels") as well as which branch each cell is assigned to
     ("branch").
 
@@ -632,6 +632,22 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
 
     return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,
                                 beta=beta, verbose=True)
+
+
+def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
+    sample_time = np.arange(0, t.get_max_time())
+    Ms = None
+    while not are_lengths_ok(Ms):
+        uMs, Ws, Hs = simulate_branching_data(t)
+        gene_scale = np.exp(sp.stats.norm.rvs(loc=gene_loc, scale=gene_s, size=t.G))
+        Ms = [np.zeros((t.time[i], t.G)) for i in range(t.branches)]
+        for i in range(t.branches):
+            Ms[i] = np.exp(uMs[i]) * gene_scale
+            
+    t.add_genes(Ms)
+
+    X, labs, brns = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
+    return(X, labs, brns)
 
 
 def assign_branches(branch_times, timezone):

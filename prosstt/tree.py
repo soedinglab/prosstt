@@ -11,8 +11,14 @@ class Tree(object):
     # default values for when the user is not decided
     def_time = 40
     def_comp = 15
+    def_genes = 500
 
-    def __init__(self, topology, time, branches, branch_points, modules, G):
+    def __init__(self, topology=[[0,1], [0,2]],
+                 time=[def_time]*3,
+                 branches=3,
+                 branch_points=1,
+                 modules=[def_comp]*3,
+                 G=500):
         self.topology = topology
         self.time = time
         self.branches = branches
@@ -46,8 +52,9 @@ class Tree(object):
         # now we can create everything else:
         time = [cls.def_time] * branches
         modules = [cls.def_comp] * branches
+        G = cls.def_genes
 
-        return cls(topology, time, branches, branch_points, modules)
+        return cls(topology, time, branches, branch_points, modules, G)
 
     def analyze_topology(self, topology):
         """

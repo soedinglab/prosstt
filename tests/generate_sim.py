@@ -7,7 +7,7 @@ import argparse
 import sys
 
 from prosstt import simulation as sim
-from prosstt import tree as tree
+from prosstt.tree import Tree as tree
 
 def save_files(job_id, save_dir, X, labs, brns, uMs, Hs, gene_scale):
     # make the data more presentable by adding gene and cell names
@@ -74,7 +74,7 @@ def main(job_id, save_dir):
 
     Ms = None
     while not sim.are_lengths_ok(Ms):
-        uMs, Ws, Hs = sim.simulate_branching_data(G, t)
+        uMs, Ws, Hs = sim.simulate_branching_data(t)
         gene_scale = np.exp(sp.stats.norm.rvs(loc=0.8, scale=1, size=G))
         Ms = [np.zeros((t.time[i], G)) for i in range(num_branches)]
         for i in range(num_branches):
