@@ -1,0 +1,6 @@
+Genes: 853
+alpha: 0.0531807674548
+beta: 1.02646819975
+pseudotimes: [88 74 84 78 43 95 87]
+#modules: [41 18 10 39 14 14 33]
+random seed: 84

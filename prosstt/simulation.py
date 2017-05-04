@@ -4,6 +4,7 @@
 import numpy as np
 import scipy as sp
 from scipy.special import gamma as Gamma
+from scipy.special import loggamma
 from scipy import stats
 import random as rng
 import sys
@@ -66,6 +67,32 @@ def random_partition(k, iterable):
     return (results)
 
 
+def lognegbin(x, theta):
+    """
+    Alternative formulation of the negative binomial distribution pmf.
+
+    scipy does not support the extended definition so we have to supply it
+    ourselves.
+
+    Parameters
+    ----------
+    x: int
+        The random variable.
+    theta: real array [p, r]
+        p is the probability of success of the Bernoulli test and r the number
+        of "failures".
+
+    Returns
+    -------
+    Probability that a discrete random variable is exactly equal to some value.
+    """
+    p, r = theta
+    if p == 0 and r == 0:
+        return 0
+    else:
+        return (loggamma(r + x) + np.log(1 - p)*r + np.log(p)*x -
+               (loggamma(r) + loggamma(x+1)))
+
 def negbin(x, theta):
     """
     Alternative formulation of the negative binomial distribution pmf.
@@ -86,13 +113,46 @@ def negbin(x, theta):
     Probability that a discrete random variable is exactly equal to some value.
     """
     p, r = theta
-    return (Gamma(r + x) * (1 - p)**r * p**x /
-            (Gamma(r) * sp.special.factorial(x)))
+    if p == 0 and r == 0:
+        return 1 if x == 0 else 0
+    else:
+        return (Gamma(r + x) * (1 - p)**r * p**x /
+               (Gamma(r) * sp.special.factorial(x)))
 
 
-def get_pr(a, b, m):
+def get_pr_amp(mu_amp, s2_amp, ksi):
     """
-    calculate parameters for my_negbin from the mean and variance of the
+    Calculate parameters the negative binomial that describes the distribution
+    of the original transcripts before amplification. We make the (strong)
+    assumption that the amplification has no sequence bias and is the same for
+    all transcripts.
+
+    Parameters
+    ----------
+    mu_amp: float
+        Mean expression of the amplification.
+    s2_amp: float
+        Variance of the amplification.
+    ksi: int
+        Number of initial transcripts present.
+
+    Returns
+    -------
+    p_amp: float
+        The probability of success of the Bernoulli test.
+    r_amp: float
+        The number of "failures" of the Bernoulli test.
+    """
+    s2 = ksi * s2_amp
+    m = ksi * mu_amp
+    p_amp = (s2 - m) / s2 if s2>0 else 0
+    r_amp = (m**2) / (s2 - m) if s2>0 else 0
+    return p_amp, r_amp
+
+
+def get_pr_umi(a, b, m):
+    """
+    Calculate parameters for my_negbin from the mean and variance of the
     distribution.
 
     For single cell RNA sequencing data we assume that the distribution of the
@@ -116,8 +176,8 @@ def get_pr(a, b, m):
         The number of "failures" of the Bernoulli test.
     """
     s2 = (a * m**2 + b * m)
-    p = (s2 - m) / s2
-    r = (m**2) / (s2 - m)
+    p = (s2 - m) / s2 if s2>0 else 0
+    r = (m**2) / (s2 - m) if s2>0 else 0
     return p, r
 
 
@@ -787,13 +847,34 @@ def collect_timestamps(timepoint, n, Tmax, t_s=4):
 
 class my_negbin(sp.stats.rv_discrete):
     """
-    class definition for the alternative negative binomial pmf so that we can
-    sample it using rvs()
+    Class definition for the alternative negative binomial pmf so that we can
+    sample it using rvs().
     """
     def _pmf(self, x, p, r):
         theta = [p, r]
-        return negbin(x, theta)
+        res = np.exp(lognegbin(x, theta))
+        res = np.real(res)
+        return res.astype("float")
 
+
+class sum_negbin(sp.stats.rv_discrete):
+    """
+    Class definition for the convoluted negative binomial pmf that describes
+    non-UMI data.
+    """
+    def _pmf(self, x, mu_amp, s_amp, p, r):
+        theta = [p, r]
+        ksis = np.arange(2*int(x)+3)
+        res = 0
+        
+        for ksi in ksis:
+            p_amp, r_amp = get_pr_amp(mu_amp, s_amp, ksi)
+            theta_amp = [p_amp, r_amp]
+            # print(theta_amp)
+            # print(negbin(x, theta_amp), negbin(ksi, theta))
+            tmp = lognegbin(x, theta_amp) + lognegbin(ksi, theta)
+            res += np.real(np.exp(tmp))
+        return res.astype("float")
 
 # def rescale_branch(M_adjust, M_norm):
 #     adjust_range = np.ptp(M_adjust, axis=0)
@@ -865,3 +946,59 @@ def are_lengths_ok(Ms=None, abs_max=800, rel_dif=0.3):
 #     for i in range(1, branches):
 #         parallel =
 #         Ms[i] = transition_adjust(Ms[i], Ms[parallel])
+
+
+def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2, verbose=True):
+    if np.shape(alpha) == ():
+        alpha = [alpha]*G
+    if np.shape(beta) == ():
+        beta = [beta]*G
+    # timezone is the part of the tree between two branch points or
+    # a branch point and an endpoint
+    timezone = tree.populate_timezone()
+    branching_times = tree.branch_times()
+    assignments = assign_branches(branching_times, timezone)
+
+    custm = my_negbin()
+    
+    stampslist = list()
+    branchlist = list()
+
+    for n, a in enumerate(timezone):
+        start = a[0]
+        end = a[1]+1
+        length = end - start
+        for b in assignments[n]: # for all possible branches in timezone a
+            stampslist.extend(np.arange(start, end))
+            branchlist.extend([b]*length)
+    
+    N = len(branchlist)*n_factor
+    X = np.zeros((N, G))
+    labels = np.zeros(N)
+    branch = np.zeros(N)
+    
+    branchlist = np.repeat(branchlist, n_factor)
+    stampslist = np.repeat(stampslist, n_factor)
+    
+    for n, z in enumerate(zip(stampslist, branchlist)):
+        timestamp, timebranch = z 
+        t = int(timestamp)
+        b = int(timebranch)
+        T_off = branching_times[b][0]
+        M = tree.means[b]
+
+        for g in range(G):
+            try:
+                mu = M[t - T_off][g]
+            except IndexError:
+                print("IndexError for g=%d, t=%d, T_off=%d in branch %s" % (g, t, T_off, b))
+                mu = M[-1][g]
+            p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
+            X[n][g] = custm.rvs(p, r)
+            labels[n] = t
+            branch[n] = b
+
+        if verbose:
+            printProgress(n, len(branchlist))
+
+    return X, labels, branch
