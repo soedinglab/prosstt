@@ -415,10 +415,9 @@ def simulate_branching_data(tree):
     absolute.
 
     In case the user calls this function directly, it is important that the Ts
-    and Ks contained in the tree object are ordered correctly, as each branch
-    can, theoretically have different length and a different expression
-    structure. A tree with 5 branches and a topology [[0,1], [0,2], [2,3],
-    [2,4]] will look like this:
+    contained in the tree object are ordered correctly, as each branch can,
+    theoretically have different length. A tree with 5 branches and a topology
+    [[0,1], [0,2], [2,3], [2,4]] will look like this:
 
             -- T[1]-
     -T[0]--|          -- T[3]-
@@ -427,7 +426,7 @@ def simulate_branching_data(tree):
     timezones:
     ---0---|----1----|----2----
 
-    and should have the appropriate K, T values at the correct positions.
+    and should have the appropriate T values at the correct positions.
 
     It is recommended that branches at the same timezone have the same length
     (pseudotime duration T), or failing that at least comparable lengths, as
@@ -445,25 +444,23 @@ def simulate_branching_data(tree):
     G = tree.G
     branches = tree.branches
     Ts = tree.time
-    Ks = tree.modules
-    lengths = [len(Ts), len(Ks)]
+    K = tree.modules
+    groups = create_groups(K, G)
 
-    if not all([l == branches for l in lengths]):
+    if not len(Ts) == branches:
         print("the parameters are not enough for %i branches" % branches)
         sys.exit(1)
 
     # define the W, H and Mu matrix containers for all branches
-    Ws = [np.zeros((Ts[i], Ks[i])) for i in range(branches)]
-    Hs = [np.zeros((Ks[i], G)) for i in range(branches)]
+    Ws = [np.zeros((Ts[i], K)) for i in range(branches)]
+    Hs = [np.zeros((K, G)) for i in range(branches)]
     Ms = [np.zeros((Ts[i], G)) for i in range(branches)]
 
     all_groups = []
     for i in range(branches):
-        K = Ks[i]
         T = Ts[i]
 
         W = simulate_W(T, K)
-        groups = create_groups(K, G)
         H = simulate_H(K, G, groups)
         Mu = np.dot(W, H)
 

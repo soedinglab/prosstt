@@ -17,7 +17,7 @@ class Tree(object):
                  time=[def_time]*3,
                  branches=3,
                  branch_points=1,
-                 modules=[def_comp]*3,
+                 modules=def_comp,
                  G=500):
         self.topology = topology
         self.time = time
@@ -51,7 +51,7 @@ class Tree(object):
 
         # now we can create everything else:
         time = [cls.def_time] * branches
-        modules = [cls.def_comp] * branches
+        modules = cls.def_comp
         G = cls.def_genes
 
         return cls(topology, time, branches, branch_points, modules, G)
