@@ -26,6 +26,7 @@ class Tree(object):
         self.modules = modules
         self.G = G
         self.means = None
+        self.density = default_density(self)
 
     @classmethod
     def from_topology(cls, topology):
@@ -55,6 +56,48 @@ class Tree(object):
         G = cls.def_genes
 
         return cls(topology, time, branches, branch_points, modules, G)
+
+    @staticmethod
+    def gen_random_topology(branch_points): # assert branch_points>0
+        n = branch_points
+        b = 2*n + 1
+        seeds = [0]
+        avail = list(reversed(range(1, b)))
+        res = []
+        while avail:
+            root = np.random.choice(seeds)
+            a = avail.pop()
+            b = avail.pop()
+            res.append([root, a])
+            res.append([root, b])
+            seeds.append(a)
+            seeds.append(b)
+            seeds.remove(root)
+        return res
+
+    @classmethod
+    def from_random_topology(cls, branch_points, time, modules, G):
+        self.topology = gen_random_topology(branch_points)
+        self.time = time
+        self.branches = branches
+        self.branch_points = branch_points
+        
+        self.time = time
+        self.modules = modules
+        self.G = G
+
+        return cls(topology, time, branches, branch_points, modules, G)
+
+    def default_density(self):
+        """
+        Initializes the density with a uniform distribution (every cell has the
+        same probability of being picked. This is in case the users want to use
+        the density sampling function.
+        """
+        total_time = np.sum(self.time)
+        density = [[1./total_time]*t for t in self.time]
+        return density
+        
 
     def analyze_topology(self, topology):
         """
@@ -95,7 +138,7 @@ class Tree(object):
         ----------
         Ms: float array
             A list of arrays. List length is #branches and array Ms[b] has the
-            dimensions time_length[b], G.
+            dimensions time[b], G.
         """
         # sanity check of dimensions so that in case a user messes up there is
         # no cryptic IndexOutOfBounds exception they have to trace.
@@ -112,6 +155,30 @@ class Tree(object):
                 raise ValueError(msg)
 
         self.means = Ms
+
+    def set_density(self, dens):
+        """
+        Sets the density as a function of the pseudotime and the branching. If
+        N points from the tree were picked randomly, then the density is the
+        probability of a pseudotime point in a certain branch being picked.
+
+        Parameters
+        ----------
+        dens: float array
+            A list of arrays. List length is #branches and len(dens[b]) equals
+            time[b].
+        """
+        if not len(dens) == self.branches:
+            msg = "The number of arrays in dens must be equal to the number \
+                  of branches in the topology"
+            raise ValueError(msg)
+        for i, d in enumerate(dens):
+            if not len(d) == self.time[i]:
+                msg = "Branch " + str(i) + " was expected to have a length " \
+                      + str((self.time[i], self.G)) + " and instead is " \
+                      + str(d.shape)
+                raise ValueError(msg)
+        self.density = dens
 
     def get_max_time(self):
         """

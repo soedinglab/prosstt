@@ -299,7 +299,7 @@ def simulate_W(T, K, cutoff=0.2, maxloops=100):
             # and came so far
             # but in the end
             # it doesn't even matter
-            return simulate_W(T)
+            return simulate_W(T, K, cutoff=cutoff)
 
     return np.transpose(W)
 
@@ -393,7 +393,7 @@ def bifurc_adjust(Mu_bif, Mu):
     return Mu_bif
 
 
-def simulate_branching_data(tree):
+def simulate_branching_data(tree, tol=0.2):
     """
     simulate the matrices that describe the branches of the differentiation
     tree.
@@ -460,7 +460,7 @@ def simulate_branching_data(tree):
     for i in range(branches):
         T = Ts[i]
 
-        W = simulate_W(T, K)
+        W = simulate_W(T, K, cutoff=tol)
         H = simulate_H(K, G, groups)
         Mu = np.dot(W, H)
 
@@ -567,7 +567,7 @@ def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
 
 
 def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
-                         verbose=True):
+                         branches=None, verbose=True):
     """
     Given the pseudotime labels of N cells, this function simulates an NxG
     count matrix. Along the simulation we can keep the information about the
@@ -619,7 +619,10 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
 
     for n, timestamp in enumerate(timestamps):
         t = int(timestamp)
-        b = pick_branch(t, timezone, assignments)
+        if branches is None:
+            b = pick_branch(t, timezone, assignments)
+        else:
+            b = branches[n]
         T_off = branching_times[b][0]
         M = tree.means[b]
 
@@ -640,7 +643,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
 
 
 def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
-                                    beta=2, verbose=True):
+                                    beta=2, verbose=True, branches=None):
     """
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
@@ -688,7 +691,7 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
     timestamps = np.repeat(sample_times, n_factor)
 
     return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=True)
+                                beta=beta, verbose=True, branches=branches)
 
 
 def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
@@ -706,6 +709,54 @@ def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
     X, labs, brns = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
     return(X, labs, brns)
 
+def sample_density(t, N, alpha=0.2, beta=3, mult=1):
+    """
+    Pick random cells from a tree according to its density profile.
+
+    Parameters
+    ----------
+    t: Tree object
+        The tree that describes the differentiation procedure.
+    N: int
+        The number of cells to be sampled.
+    alpha: float, optional
+        Coefficient for the quardratic term of the negative binomial variance.
+    beta: float, optional
+        Coefficient for the linear term of the negative binomial variance.
+    mult: int, optional
+        How many times each sample time should be sampled.
+
+    Returns
+    -------
+    X: int array
+        simulated single cell RNA seq experiment.
+    labels: int array
+        The pseudotimes at which each cell was sampled. Corresponds to the
+        rows of X.
+    branch:
+        The branch of the differentiation tree to which each cell belongs.
+        Corresponds to the rows of X.
+    """
+    hybrid = [np.zeros((t.time[b], 2)) for b in range(t.branches)]
+
+    pseudotimes = [np.arange(t) for t in t.time]
+    ps_branches = [b*np.ones(t.time[b]) for b in range(t.branches)]
+    for top in t.topology:
+        pseudotimes[top[1]] += pseudotimes[top[0]][-1] + 1
+
+    for b in range(t.branches):
+        hybrid[b][:,0] = pseudotimes[b]
+        hybrid[b][:,1] = ps_branches[b]
+
+    elements = [pt for p in hybrid for pt in p]
+    probabilities = [dn for d in t.density for dn in d]
+
+    sample = np.random.choice(elements, N, p=probabilities)
+    sample_time = sample[:,0]
+    sample_branches = sample[:,1]
+
+    X, labels, branch = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
+    return(X, labels, branch)
 
 def assign_branches(branch_times, timezone):
     """
