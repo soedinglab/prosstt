@@ -631,7 +631,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
                 mu = M[t - T_off][g]
             except IndexError:
                 mu = M[-1][g]
-            p, r = get_pr(a=alpha, b=beta, m=mu)
+            p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
             X[n][g] = custm.rvs(p, r)
             labels[n] = t
             branch[n] = b
@@ -748,14 +748,15 @@ def sample_density(t, N, alpha=0.2, beta=3, mult=1):
         hybrid[b][:,0] = pseudotimes[b]
         hybrid[b][:,1] = ps_branches[b]
 
-    elements = [pt for p in hybrid for pt in p]
+    elements = np.array([pt for p in hybrid for pt in p])
     probabilities = [dn for d in t.density for dn in d]
 
-    sample = np.random.choice(elements, N, p=probabilities)
-    sample_time = sample[:,0]
-    sample_branches = sample[:,1]
+    sample = np.random.choice(np.arange(len(probabilities)), N, p=probabilities)
+    sample_time = elements[sample, 0].astype(int)
+    sample_branches = elements[sample,1].astype(int)
 
-    X, labels, branch = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
+    X, labels, branch = sample_data_with_absolute_times(mult, t.G, t, sample_time,
+                        alpha=alpha, beta=beta, branches=sample_branches)
     return(X, labels, branch)
 
 def assign_branches(branch_times, timezone):

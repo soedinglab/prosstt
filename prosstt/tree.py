@@ -18,7 +18,8 @@ class Tree(object):
                  branches=3,
                  branch_points=1,
                  modules=def_comp,
-                 G=500):
+                 G=500,
+                 density = None):
         self.topology = topology
         self.time = time
         self.branches = branches
@@ -26,7 +27,10 @@ class Tree(object):
         self.modules = modules
         self.G = G
         self.means = None
-        self.density = default_density(self)
+        if density is None:
+            self.density = self.default_density()
+        else:
+            self.density = density
 
     @classmethod
     def from_topology(cls, topology):
@@ -95,7 +99,7 @@ class Tree(object):
         the density sampling function.
         """
         total_time = np.sum(self.time)
-        density = [[1./total_time]*t for t in self.time]
+        density = [np.array([1./total_time]*t) for t in self.time]
         return density
         
 
