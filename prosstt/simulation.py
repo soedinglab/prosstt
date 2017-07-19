@@ -393,7 +393,7 @@ def bifurc_adjust(Mu_bif, Mu):
     return Mu_bif
 
 
-def simulate_branching_data(tree, tol=0.2):
+def simulate_branching_data(tree, tol=0.2, HH=None):
     """
     simulate the matrices that describe the branches of the differentiation
     tree.
@@ -453,7 +453,10 @@ def simulate_branching_data(tree, tol=0.2):
 
     # define the W, H and Mu matrix containers for all branches
     Ws = [np.zeros((Ts[i], K)) for i in range(branches)]
-    Hs = [np.zeros((K, G)) for i in range(branches)]
+    if HH is None:
+        Hs = [np.zeros((K, G)) for i in range(branches)]
+    else:
+        Hs = HH
     Ms = [np.zeros((Ts[i], G)) for i in range(branches)]
 
     all_groups = []
@@ -461,11 +464,14 @@ def simulate_branching_data(tree, tol=0.2):
         T = Ts[i]
 
         W = simulate_W(T, K, cutoff=tol)
-        H = simulate_H(K, G, groups)
+        if HH is None:
+            H = simulate_H(K, G, groups)
+            Hs[i] = H
+        else:
+            H = HH[i]
         Mu = np.dot(W, H)
 
         Ws[i] = W
-        Hs[i] = H
         Ms[i] = Mu
         all_groups.append(groups)
 
