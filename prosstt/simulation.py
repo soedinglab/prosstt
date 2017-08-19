@@ -6,6 +6,7 @@ import scipy as sp
 from scipy.special import gamma as Gamma
 from scipy.special import loggamma
 from scipy import stats
+from scipy.stats import truncnorm
 import random as rng
 import sys
 from collections import defaultdict
@@ -64,7 +65,7 @@ def random_partition(k, iterable):
     for value in iterable:
         x = rng.randrange(k)
         results[x].append(value)
-    return (results)
+    return results
 
 
 def lognegbin(x, theta):
@@ -90,8 +91,9 @@ def lognegbin(x, theta):
     if p == 0 and r == 0:
         return 0
     else:
-        return (loggamma(r + x) + np.log(1 - p)*r + np.log(p)*x -
-               (loggamma(r) + loggamma(x+1)))
+        return (loggamma(r + x) + np.log(1 - p) * r + np.log(p) * x -
+                (loggamma(r) + loggamma(x + 1)))
+
 
 def negbin(x, theta):
     """
@@ -117,7 +119,7 @@ def negbin(x, theta):
         return 1 if x == 0 else 0
     else:
         return (Gamma(r + x) * (1 - p)**r * p**x /
-               (Gamma(r) * sp.special.factorial(x)))
+                (Gamma(r) * sp.special.factorial(x)))
 
 
 def get_pr_amp(mu_amp, s2_amp, ksi):
@@ -145,8 +147,8 @@ def get_pr_amp(mu_amp, s2_amp, ksi):
     """
     s2 = ksi * s2_amp
     m = ksi * mu_amp
-    p_amp = (s2 - m) / s2 if s2>0 else 0
-    r_amp = (m**2) / (s2 - m) if s2>0 else 0
+    p_amp = (s2 - m) / s2 if s2 > 0 else 0
+    r_amp = (m**2) / (s2 - m) if s2 > 0 else 0
     return p_amp, r_amp
 
 
@@ -181,7 +183,7 @@ def get_pr_umi(a, b, m):
     return p, r
 
 
-def diffusion(T, allow_negative=False):
+def diffusion(T):
     """
     amortized diffusion process, usually between 0 and 1
 
@@ -482,7 +484,7 @@ def simulate_branching_data(tree, tol=0.2, HH=None):
 
 
 def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
-                alpha=0.3, beta=2, verbose=True):
+                alpha=0.3, beta=2, verbose=True, trunc_mean=1., trunc_v=0.6,):
     """
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
@@ -569,11 +571,13 @@ def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
         timestamps.extend(collect_timestamps(tp, n, total_time,
                           t_s=sample_spreads))
     return sample_data_at_times(cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=True)
+                                beta=beta, verbose=True, trunc_mean=1.,
+                                trunc_v=0.6,)
 
 
 def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
-                         branches=None, verbose=True):
+                         trunc_mean=1., trunc_v=0.6, branches=None,
+                         verbose=True, scale=True):
     """
     Given the pseudotime labels of N cells, this function simulates an NxG
     count matrix. Along the simulation we can keep the information about the
@@ -610,10 +614,17 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
         Corresponds to the rows of X.
     """
     # the final result
-    X = np.zeros((np.sum(cells), G))
+    N = np.sum(cells)
+    X = np.zeros((N, G))
 
-    labels = np.zeros(np.sum(cells))
-    branch = np.zeros(np.sum(cells))
+    labels = np.zeros(N)
+    branch = np.zeros(N)
+    if scale:
+        rv = truncnorm(a=-1. / trunc_v, b=9 / trunc_v, loc=trunc_mean,
+                       scale=trunc_v)
+        scalings = rv.rvs(size=N)
+    else:
+        scalings = np.ones(N)
 
     # timezone is the part of the tree between two branch points or
     # a branch point and an endpoint
@@ -636,7 +647,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
             try:
                 mu = M[t - T_off][g]
             except IndexError:
-                mu = M[-1][g]
+                mu = M[-1][g] * scalings[n]
             p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
             X[n][g] = custm.rvs(p, r)
             labels[n] = t
@@ -645,11 +656,12 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
         if verbose:
             printProgress(n, len(timestamps))
 
-    return X, labels, branch
+    return X, labels, branch, scalings
 
 
 def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
-                                    beta=2, verbose=True, branches=None):
+                                    beta=2, verbose=True, branches=None,
+                                    trunc_mean=1., trunc_v=0.6,):
     """
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
@@ -697,7 +709,8 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
     timestamps = np.repeat(sample_times, n_factor)
 
     return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=True, branches=branches)
+                                beta=beta, verbose=True, branches=branches,
+                                trunc_mean=1., trunc_v=0.6,)
 
 
 def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
@@ -712,8 +725,9 @@ def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
             
     t.add_genes(Ms)
 
-    X, labs, brns = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
-    return(X, labs, brns)
+    X, labs, brns, scalings = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
+    return X, labs, brns
+
 
 def sample_density(t, N, alpha=0.2, beta=3, mult=1):
     """
@@ -759,11 +773,12 @@ def sample_density(t, N, alpha=0.2, beta=3, mult=1):
 
     sample = np.random.choice(np.arange(len(probabilities)), N, p=probabilities)
     sample_time = elements[sample, 0].astype(int)
-    sample_branches = elements[sample,1].astype(int)
+    sample_branches = elements[sample, 1].astype(int)
 
     X, labels, branch = sample_data_with_absolute_times(mult, t.G, t, sample_time,
-                        alpha=alpha, beta=beta, branches=sample_branches)
-    return(X, labels, branch)
+                            alpha=alpha, beta=beta, branches=sample_branches)
+    return X, labels, branch
+
 
 def assign_branches(branch_times, timezone):
     """
@@ -919,9 +934,9 @@ class sum_negbin(sp.stats.rv_discrete):
     """
     def _pmf(self, x, mu_amp, s_amp, p, r):
         theta = [p, r]
-        ksis = np.arange(2*int(x)+3)
+        ksis = np.arange(2 * int(x) + 3)
         res = 0
-        
+
         for ksi in ksis:
             p_amp, r_amp = get_pr_amp(mu_amp, s_amp, ksi)
             theta_amp = [p_amp, r_amp]
@@ -1003,11 +1018,19 @@ def are_lengths_ok(Ms=None, abs_max=800, rel_dif=0.3):
 #         Ms[i] = transition_adjust(Ms[i], Ms[parallel])
 
 
-def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2, verbose=True):
+def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
+                         trunc_mean=1., trunc_v=0.6, verbose=True, scale=True):
     if np.shape(alpha) == ():
-        alpha = [alpha]*G
+        alpha = [alpha] * G
     if np.shape(beta) == ():
-        beta = [beta]*G
+        beta = [beta] * G
+
+    if scale:
+        rv = truncnorm(a=-1. / trunc_v, b=9 / trunc_v, loc=trunc_mean,
+                       scale=trunc_v)
+        scalings = rv.rvs(size=N)
+    else:
+        scalings = np.ones(N)
     # timezone is the part of the tree between two branch points or
     # a branch point and an endpoint
     timezone = tree.populate_timezone()
@@ -1015,26 +1038,26 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2, ver
     assignments = assign_branches(branching_times, timezone)
 
     custm = my_negbin()
-    
+
     stampslist = list()
     branchlist = list()
 
     for n, a in enumerate(timezone):
         start = a[0]
-        end = a[1]+1
+        end = a[1] + 1
         length = end - start
-        for b in assignments[n]: # for all possible branches in timezone a
+        for b in assignments[n]:  # for all possible branches in timezone a
             stampslist.extend(np.arange(start, end))
-            branchlist.extend([b]*length)
-    
-    N = len(branchlist)*n_factor
+            branchlist.extend([b] * length)
+
+    N = len(branchlist) * n_factor
     X = np.zeros((N, G))
     labels = np.zeros(N)
     branch = np.zeros(N)
-    
+
     branchlist = np.repeat(branchlist, n_factor)
     stampslist = np.repeat(stampslist, n_factor)
-    
+
     for n, z in enumerate(zip(stampslist, branchlist)):
         timestamp, timebranch = z 
         t = int(timestamp)
@@ -1047,7 +1070,7 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2, ver
                 mu = M[t - T_off][g]
             except IndexError:
                 print("IndexError for g=%d, t=%d, T_off=%d in branch %s" % (g, t, T_off, b))
-                mu = M[-1][g]
+                mu = M[-1][g] * scalings[n]
             p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
             X[n][g] = custm.rvs(p, r)
             labels[n] = t
@@ -1056,4 +1079,4 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2, ver
         if verbose:
             printProgress(n, len(branchlist))
 
-    return X, labels, branch
+    return X, labels, branch, scalings

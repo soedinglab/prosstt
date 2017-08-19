@@ -19,7 +19,7 @@ class Tree(object):
                  branch_points=1,
                  modules=def_comp,
                  G=500,
-                 density = None):
+                 density=None):
         self.topology = topology
         self.time = time
         self.branches = branches
