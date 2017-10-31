@@ -6,7 +6,6 @@ import scipy as sp
 from scipy.special import gamma as Gamma
 from scipy.special import loggamma
 from scipy import stats
-from scipy.stats import truncnorm
 import random as rng
 import sys
 from collections import defaultdict
@@ -484,7 +483,7 @@ def simulate_branching_data(tree, tol=0.2, HH=None):
 
 
 def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
-                alpha=0.3, beta=2, verbose=True, trunc_mean=1., trunc_v=0.6,):
+                alpha=0.3, beta=2, verbose=True, scale_v=0.7):
     """
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
@@ -571,13 +570,11 @@ def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
         timestamps.extend(collect_timestamps(tp, n, total_time,
                           t_s=sample_spreads))
     return sample_data_at_times(cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=True, trunc_mean=1.,
-                                trunc_v=0.6,)
+                                beta=beta, verbose=verbose, scale_v=scale_v)
 
 
 def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
-                         trunc_mean=1., trunc_v=0.6, branches=None,
-                         verbose=True, scale=True):
+                         scale_v=0.7, branches=None, verbose=True, scale=True):
     """
     Given the pseudotime labels of N cells, this function simulates an NxG
     count matrix. Along the simulation we can keep the information about the
@@ -620,9 +617,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
     labels = np.zeros(N)
     branch = np.zeros(N)
     if scale:
-        rv = truncnorm(a=-1. / trunc_v, b=9 / trunc_v, loc=trunc_mean,
-                       scale=trunc_v)
-        scalings = rv.rvs(size=N)
+        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
     else:
         scalings = np.ones(N)
 
@@ -645,7 +640,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
 
         for g in range(G):
             try:
-                mu = M[t - T_off][g]
+                mu = M[t - T_off][g] * scalings[n]
             except IndexError:
                 mu = M[-1][g] * scalings[n]
             p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
@@ -661,7 +656,7 @@ def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
 
 def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
                                     beta=2, verbose=True, branches=None,
-                                    trunc_mean=1., trunc_v=0.6,):
+                                    scale_v=0.7):
     """
     simulates an NxG count matrix and returns it with the labels and the
     branch information of the cells.
@@ -710,7 +705,7 @@ def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
 
     return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,
                                 beta=beta, verbose=True, branches=branches,
-                                trunc_mean=1., trunc_v=0.6,)
+                                scale_v=0.6,)
 
 
 def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
@@ -1019,18 +1014,12 @@ def are_lengths_ok(Ms=None, abs_max=800, rel_dif=0.3):
 
 
 def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
-                         trunc_mean=1., trunc_v=0.6, verbose=True, scale=True):
+                         scale_v=0.7, verbose=True, scale=True):
     if np.shape(alpha) == ():
         alpha = [alpha] * G
     if np.shape(beta) == ():
         beta = [beta] * G
 
-    if scale:
-        rv = truncnorm(a=-1. / trunc_v, b=9 / trunc_v, loc=trunc_mean,
-                       scale=trunc_v)
-        scalings = rv.rvs(size=N)
-    else:
-        scalings = np.ones(N)
     # timezone is the part of the tree between two branch points or
     # a branch point and an endpoint
     timezone = tree.populate_timezone()
@@ -1055,6 +1044,11 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
     labels = np.zeros(N)
     branch = np.zeros(N)
 
+    if scale:
+        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
+    else:
+        scalings = np.ones(N)
+
     branchlist = np.repeat(branchlist, n_factor)
     stampslist = np.repeat(stampslist, n_factor)
 
@@ -1067,7 +1061,7 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
 
         for g in range(G):
             try:
-                mu = M[t - T_off][g]
+                mu = M[t - T_off][g] * scalings[n]
             except IndexError:
                 print("IndexError for g=%d, t=%d, T_off=%d in branch %s" % (g, t, T_off, b))
                 mu = M[-1][g] * scalings[n]

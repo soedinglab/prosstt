@@ -13,8 +13,8 @@ class Tree(object):
     def_comp = 15
     def_genes = 500
 
-    def __init__(self, topology=[[0,1], [0,2]],
-                 time=[def_time]*3,
+    def __init__(self, topology=[[0, 1], [0, 2]],
+                 time=[def_time] * 3,
                  branches=3,
                  branch_points=1,
                  modules=def_comp,
@@ -62,9 +62,10 @@ class Tree(object):
         return cls(topology, time, branches, branch_points, modules, G)
 
     @staticmethod
-    def gen_random_topology(branch_points): # assert branch_points>0
+    # assert branch_points>0
+    def gen_random_topology(branch_points):
         n = branch_points
-        b = 2*n + 1
+        b = 2 * n + 1
         seeds = [0]
         avail = list(reversed(range(1, b)))
         res = []
@@ -99,9 +100,8 @@ class Tree(object):
         the density sampling function.
         """
         total_time = np.sum(self.time)
-        density = [np.array([1./total_time]*t) for t in self.time]
+        density = [np.array([1. / total_time] * t) for t in self.time]
         return density
-        
 
     def analyze_topology(self, topology):
         """
