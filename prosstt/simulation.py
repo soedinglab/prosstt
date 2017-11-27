@@ -721,7 +721,7 @@ def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
     t.add_genes(Ms)
 
     X, labs, brns, scalings = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
-    return X, labs, brns
+    return X, labs, brns, scalings
 
 
 def sample_density(t, N, alpha=0.2, beta=3, mult=1):
@@ -770,9 +770,9 @@ def sample_density(t, N, alpha=0.2, beta=3, mult=1):
     sample_time = elements[sample, 0].astype(int)
     sample_branches = elements[sample, 1].astype(int)
 
-    X, labels, branch = sample_data_with_absolute_times(mult, t.G, t, sample_time,
+    X, labels, branch, scalings = sample_data_with_absolute_times(mult, t.G, t, sample_time,
                             alpha=alpha, beta=beta, branches=sample_branches)
-    return X, labels, branch
+    return X, labels, branch, scalings
 
 
 def assign_branches(branch_times, timezone):
