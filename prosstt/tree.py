@@ -82,14 +82,13 @@ class Tree(object):
 
     @classmethod
     def from_random_topology(cls, branch_points, time, modules, G):
-        self.topology = gen_random_topology(branch_points)
-        self.time = time
-        self.branches = branches
-        self.branch_points = branch_points
-        
-        self.time = time
-        self.modules = modules
-        self.G = G
+        topology = Tree.gen_random_topology(branch_points)
+        time = time
+        branches = len(np.unique(topology))
+        branch_points = branch_points
+        time = time
+        modules = modules
+        G = G
 
         return cls(topology, time, branches, branch_points, modules, G)
 
