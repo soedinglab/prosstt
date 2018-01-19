@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import numpy as np
+from numpy import random
 import scipy as sp
 from scipy.special import gamma as Gamma
 from scipy.special import loggamma
@@ -9,6 +10,16 @@ from scipy import stats
 import random as rng
 import sys
 from collections import defaultdict
+
+
+def generate_negbin_params(tree, alpha=0.2, beta=1, a_scale=1.5, b_scale=1.5):
+    mu_a = np.log(alpha)
+    s2_a = np.log(a_scale)
+    mu_b = np.log(beta)
+    s2_b = np.log(b_scale)
+    alphas = np.exp(random.normal(loc=mu_a, scale=s2_a, size=tree.G))
+    betas = np.exp(random.normal(loc=mu_b, scale=s2_b, size=tree.G)) + 1
+    return alphas, betas
 
 
 def printProgress(iteration, total, prefix='', suffix='', decimals=1,
@@ -719,8 +730,11 @@ def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
             Ms[i] = np.exp(uMs[i]) * gene_scale
             
     t.add_genes(Ms)
+    alphas, betas = generate_negbin_params(t, alpha=alpha, beta=beta)
 
-    X, labs, brns, scalings = sample_data_with_absolute_times(mult, t, sample_time, alpha, beta)
+    X, labs, brns, scalings = sample_data_with_absolute_times(mult, t.G, t,
+                                                              sample_time,
+                                                              alphas, betas)
     return X, labs, brns, scalings
 
 
