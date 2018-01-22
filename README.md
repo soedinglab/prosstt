@@ -14,7 +14,9 @@ PROSSTT can be installed using the `pip` package manager or any `pip`-compatible
 
 ### Dependencies
 
-PROSSTT was developed and tested in Python 3.5 and 3.6. While older Python 3 versions should work, there is no guarantee that they will. PROSSTT itself, the scripts, and notebooks included in the package, require the `numpy`, `scipy`, `pandas` and `matplotlib` libraries. We recommend using [scanpy](https://github.com/theislab/scanpy) to calculate diffusion maps in order to visualize the simulations, which requires [anndata](https://github.com/theislab/anndata) and Python 3.6 to work.
+PROSSTT was developed and tested in Python 3.5 and 3.6. While older Python 3 versions should work, there is no guarantee that they will. PROSSTT itself, the scripts, and `jupyter` notebooks included in the package, require the `numpy`, `scipy`, `pandas` and `matplotlib` libraries. We recommend using [scanpy](https://github.com/theislab/scanpy) to calculate diffusion maps in order to visualize the simulations, which requires [anndata](https://github.com/theislab/anndata) and Python 3.6 to work.
+
+For more information about Jupyter notebooks, their installation, and their use, please refer to the [official documentation](http://jupyter.readthedocs.io/en/latest/install.html).
 
 ### How to use
 
