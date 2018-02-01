@@ -3,7 +3,9 @@
 
 from collections import defaultdict
 import numpy as np
-
+import pandas as pd
+import newick
+from prosstt import tree_utils as tu
 
 class Tree(object):
     'topology of the differentiation tree'
@@ -13,53 +15,31 @@ class Tree(object):
     def_comp = 15
     def_genes = 500
 
-    def __init__(self, topology=[[0, 1], [0, 2]],
-                 time=[def_time] * 3,
+    def __init__(self, topology=[["A", "B"], ["A", "C"]],
+                 time={"A":def_time, "B":def_time, "C":def_time},
                  branches=3,
                  branch_points=1,
                  modules=def_comp,
-                 G=500,
-                 density=None):
+                 G=def_genes,
+                 density=None,
+                 root=None):
         self.topology = topology
-        self.time = time
+        self.time = pd.Series(time, name="time")
         self.branches = branches
         self.branch_points = branch_points
         self.modules = modules
         self.G = G
         self.means = None
+
+        if root is None:
+            self.root = time.keys()[0]
+        else:
+            self.root = root
+
         if density is None:
             self.density = self.default_density()
         else:
             self.density = density
-
-    @classmethod
-    def from_topology(cls, topology):
-        """
-        Alternative constructor that creates a default tree object from a
-        given topology.
-
-        Parameters
-        ----------
-        topology: int array
-            An array that describes which branches are connected to each other.
-            [[0, 1], [0, 2]] describes a single bifurcation where branch 0
-            is connected with branches 1 and 2.
-
-        Returns
-        -------
-        Tree
-            An object of the Tree class with default branch lengths and branch
-            times.
-        """
-        # information about branches/branchpoints is in the topology
-        branches, branch_points = cls.analyze_topology(cls, topology)
-
-        # now we can create everything else:
-        time = [cls.def_time] * branches
-        modules = cls.def_comp
-        G = cls.def_genes
-
-        return cls(topology, time, branches, branch_points, modules, G)
 
     @staticmethod
     # assert branch_points>0
@@ -81,16 +61,26 @@ class Tree(object):
         return res
 
     @classmethod
-    def from_random_topology(cls, branch_points, time, modules, G):
-        topology = Tree.gen_random_topology(branch_points)
-        time = time
-        branches = len(np.unique(topology))
-        branch_points = branch_points
-        time = time
-        modules = modules
-        G = G
+    def from_newick(cls, newick_tree,
+                    modules=10,
+                    genes=200,
+                    density=None):
+        """
+        Generate a lineage tree from a Newick-formatted string.
+        """
+        tree = newick.loads(newick_tree)
+        top, time, branches, br_points, root = tu.parse_newick(tree, cls.def_time)
+        tree = Tree(top, time, branches, br_points, modules, genes, density, root)
+        return tree
 
-        return cls(topology, time, branches, branch_points, modules, G)
+    @classmethod
+    def from_random_topology(cls, branch_points, time, modules, genes):
+        """
+        Generate a random binary tree topology given a number of branch points.
+        """
+        topology = Tree.gen_random_topology(branch_points)
+        branches = len(np.unique(topology))
+        return cls(topology, time, branches, branch_points, modules, genes)
 
     def default_density(self):
         """
@@ -98,39 +88,14 @@ class Tree(object):
         same probability of being picked. This is in case the users want to use
         the density sampling function.
         """
-        total_time = np.sum(self.time)
-        density = [np.array([1. / total_time] * t) for t in self.time]
+        total_time = 0
+        density = {}
+        for v in self.time.values:
+            total_time += v
+
+        for k in self.time.keys():
+            density[k] = np.array([1. / total_time] * np.int(self.time[k]))
         return density
-
-    def analyze_topology(self, topology):
-        """
-        Identifies the number of branch points and branches described by the
-        input topology.
-
-        Parameters
-        ----------
-        topology: int array
-            The topology of a tree. Each entry in the array is a pair of IDs for
-            two different branches. The branch described by the second ID
-            follows the branch described by the first.
-
-        Returns
-        -------
-        branches: int
-            The number of different branch IDs in the input topology.
-        branch_points: int
-            The number of branch points in the topology.
-        """
-        # for [[0,1], [0,2], [2,3], [2,4], [2,5]]
-        # #diff numbers at position 1 = #branchpoints
-        # #diff numbers in topology = #branches
-        all_branches = [branch for pair in topology for branch in pair]
-        unique_branches = set(all_branches)
-
-        starts = [pair[0] for pair in topology]
-        unique_starts = set(starts)
-
-        return len(unique_branches), len(unique_starts)
 
     def add_genes(self, Ms):
         """
@@ -149,12 +114,13 @@ class Tree(object):
             msg = "The number of arrays in Ms must be equal to the number of \
                    branches in the topology"
             raise ValueError(msg)
-        for i, m in enumerate(Ms):
-            if not m.shape == (self.time[i], self.G):
-                # TODO: use str format
-                msg = "Branch " + str(i) + " was expected to have a shape " \
-                      + str((self.time[i], self.G)) + " and instead is " \
-                      + str(m.shape)
+
+        for branch in Ms:
+            mean = Ms[branch]
+            if not mean.shape == (self.time[branch], self.G):
+                msg = "Branch " + branch + " was expected to have a shape " \
+                        + str((self.time[branch], self.G)) + " and instead is " \
+                        + str(mean.shape)
                 raise ValueError(msg)
 
         self.means = Ms
@@ -185,25 +151,25 @@ class Tree(object):
 
     def get_max_time(self):
         """
-        Given the lengths of the branches calculate the maximum duration
-        described by the tree.
+        Calculate the maximum pseudotime duration possible for the tree.
 
         Returns
         -------
-        total: int
-            Total pseudotime duration of the differentiation tree.
+        start: str
+            Name of the starting node.
         """
         # find paths to leaves in dict:
-        tree_paths = np.array(self.paths(0))
+        tree_paths = self.paths(self.root)
 
         total_lengths = np.zeros(len(tree_paths))
 
-        for i in range(len(tree_paths)):
-            total_lengths[i] = np.sum(np.array(self.time)[tree_paths[i]])
+        for i, path in enumerate(tree_paths):
+            path_length = [self.time[branch] for branch in path]
+            total_lengths[i] = np.sum(path_length)
 
         return np.max(total_lengths)
 
-    def dictionify(self):
+    def as_dictionary(self):
         """
         Converts the tree topology to a dictionary where the ID of every branch
         points to the branches that bifurcate from it.
@@ -218,31 +184,31 @@ class Tree(object):
             treedict[b[0]].append(b[1])
         return(treedict)
 
-    def paths(self, key):
+    def paths(self, start):
         """
         Finds all paths from a given start point to the leaves.
 
         Parameters
         ----------
-        key: int
+        start: str
             The starting point.
 
         Returns
         -------
         rooted_paths: int array
-            An array that contains all paths from the starting branch to all
-            branches that don't bifurcate.
+            An array that contains all paths from the starting point to all
+            tree leaves.
         """
         # make a list of all possible paths through the tree
         # and calculate the length of those paths, then keep max
         # first take topology and make it a dictionary:
-        treedict = self.dictionify()
-        if not treedict[key]:
-            return [[key]]
+        treedict = self.as_dictionary()
+        if not treedict[start]:
+            return [[start]]
         else:
             rooted_paths = []
-            root = [key]
-            for v in treedict[key]:
+            root = [start]
+            for v in treedict[start]:
                 usable = self.paths(v)
                 for path in usable:
                     rooted_paths.append(root + path)
@@ -268,9 +234,8 @@ class Tree(object):
             and 2 start at pseudotime 25 and branches 3,4 at pseudotime 50.
         """
         res = []
-        ntime = np.array(self.time)
-        tpaths = self.paths(0)
-        stacks = [self.morph_stack(ntime[np.array(x)].tolist()) for x in tpaths]
+        tpaths = self.paths(self.root)
+        stacks = [self.morph_stack(self.time[x].tolist()) for x in tpaths]
 
         while stacks:
             lpaths = len(stacks)
@@ -311,7 +276,7 @@ class Tree(object):
         """
         branch_time = defaultdict(list)
 
-        branch_time[0] = [0, self.time[0] - 1]
+        branch_time[self.root] = [0, self.time[self.root] - 1]
         for b in self.topology:
             # the start time of b[1] is the end time of b[0]
             b0_end = branch_time[b[0]][1]

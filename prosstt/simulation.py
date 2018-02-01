@@ -7,6 +7,7 @@ import scipy as sp
 from scipy.special import gamma as Gamma
 from scipy.special import loggamma
 from scipy import stats
+import pandas as pd
 import random as rng
 import sys
 from collections import defaultdict
@@ -405,7 +406,7 @@ def bifurc_adjust(Mu_bif, Mu):
     return Mu_bif
 
 
-def simulate_branching_data(tree, tol=0.2, HH=None):
+def simulate_branching_data(tree, tol=0.2, coefficients=None):
     """
     simulate the matrices that describe the branches of the differentiation
     tree.
@@ -453,44 +454,30 @@ def simulate_branching_data(tree, tol=0.2, HH=None):
         Contains information about the topology of the tree that is to be
         simulated.
     """
-    G = tree.G
-    branches = tree.branches
-    Ts = tree.time
-    K = tree.modules
-    groups = create_groups(K, G)
-
-    if not len(Ts) == branches:
-        print("the parameters are not enough for %i branches" % branches)
+    if not len(tree.time) == tree.branches:
+        print("the parameters are not enough for %i branches" % tree.branches)
         sys.exit(1)
 
     # define the W, H and Mu matrix containers for all branches
-    Ws = [np.zeros((Ts[i], K)) for i in range(branches)]
-    if HH is None:
-        Hs = [np.zeros((K, G)) for i in range(branches)]
-    else:
-        Hs = HH
-    Ms = [np.zeros((Ts[i], G)) for i in range(branches)]
+    programs = {}
+    relative_means = {}
+    if coefficients is None:
+        groups = create_groups(tree.modules, tree.G)
+        coefficients = {}
 
-    all_groups = []
-    for i in range(branches):
-        T = Ts[i]
-
-        W = simulate_W(T, K, cutoff=tol)
-        if HH is None:
-            H = simulate_H(K, G, groups)
-            Hs[i] = H
-        else:
-            H = HH[i]
-        Mu = np.dot(W, H)
-
-        Ws[i] = W
-        Ms[i] = Mu
-        all_groups.append(groups)
+    for branch in tree.time.keys():
+        programs[branch] = simulate_W(tree.time[branch], tree.modules, cutoff=tol)
+        if coefficients is None:
+            coefficients[branch] = simulate_H(tree.modules, tree.G, groups)
+        relative_means[branch] = np.dot(programs[branch], coefficients[branch])
 
     for b in tree.topology:
-        Ms[b[1]] = bifurc_adjust(Ms[b[1]], Ms[b[0]])
+        relative_means[b[1]] = bifurc_adjust(relative_means[b[1]],
+                                             relative_means[b[0]])
 
-    return Ms, Ws, Hs
+    return (pd.Series(relative_means),
+            pd.Series(programs),
+            pd.Series(coefficients))
 
 
 def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
@@ -992,13 +979,13 @@ def are_lengths_ok(Ms=None, abs_max=800, rel_dif=0.3):
         Whether the timezone is contained within the branch.
     """
     # worked out kinda ok
-    if Ms is None:
+    if not Ms:
         return False
 
     max_crit = False
     rel_crit = False
 
-    maxes = np.array([np.max(np.ptp(x, axis=0)) for x in Ms])
+    maxes = np.array([np.max(np.ptp(x, axis=0)) for x in Ms.values()])
     if np.all(maxes < abs_max):
         max_crit = True
 
@@ -1056,7 +1043,7 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
     N = len(branchlist) * n_factor
     X = np.zeros((N, G))
     labels = np.zeros(N)
-    branch = np.zeros(N)
+    branch = np.empty(N, dtype=type(tree.root))
 
     if scale:
         scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
@@ -1069,7 +1056,7 @@ def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
     for n, z in enumerate(zip(stampslist, branchlist)):
         timestamp, timebranch = z 
         t = int(timestamp)
-        b = int(timebranch)
+        b = timebranch
         T_off = branching_times[b][0]
         M = tree.means[b]
 
