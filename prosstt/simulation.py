@@ -454,8 +454,8 @@ def simulate_branching_data(tree, tol=0.2, coefficients=None):
         Contains information about the topology of the tree that is to be
         simulated.
     """
-    if not len(tree.time) == tree.branches:
-        print("the parameters are not enough for %i branches" % tree.branches)
+    if not len(tree.time) == tree.num_branches:
+        print("the parameters are not enough for %i branches" % tree.num_branches)
         sys.exit(1)
 
     # define the W, H and Mu matrix containers for all branches

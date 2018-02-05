@@ -17,7 +17,7 @@ class Tree(object):
 
     def __init__(self, topology=[["A", "B"], ["A", "C"]],
                  time={"A":def_time, "B":def_time, "C":def_time},
-                 branches=3,
+                 num_branches=3,
                  branch_points=1,
                  modules=def_comp,
                  G=def_genes,
@@ -25,14 +25,15 @@ class Tree(object):
                  root=None):
         self.topology = topology
         self.time = pd.Series(time, name="time")
-        self.branches = branches
+        self.num_branches = num_branches
         self.branch_points = branch_points
         self.modules = modules
         self.G = G
         self.means = None
+        self.branches = list(time.keys())
 
         if root is None:
-            self.root = list(time.keys())[0]
+            self.root = self.branches[0]
         else:
             self.root = root
 
@@ -110,7 +111,7 @@ class Tree(object):
         """
         # sanity check of dimensions so that in case a user messes up there is
         # no cryptic IndexOutOfBounds exception they have to trace.
-        if not len(Ms) == self.branches:
+        if not len(Ms) == self.num_branches:
             msg = "The number of arrays in Ms must be equal to the number of \
                    branches in the topology"
             raise ValueError(msg)
