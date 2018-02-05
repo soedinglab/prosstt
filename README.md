@@ -22,4 +22,4 @@ For more information about Jupyter notebooks, their installation, and their use,
 
 We provide jupyter notebooks with a [baseline example](https://github.com/soedinglab/prosstt/blob/master/examples/minimal_example.ipynb), a more involved example that explains the choice of [variance parameters](https://github.com/soedinglab/prosstt/blob/master/examples/variance_sim.ipynb), and a notebook that showcases the different [sampling strategies](https://github.com/soedinglab/prosstt/blob/master/examples/density_sampling.ipynb).
 
-For more information, please refer to the [documentation](http://www.404errorpages.com/).
+~~For more information, please refer to the [documentation](http://www.404errorpages.com/).~~
