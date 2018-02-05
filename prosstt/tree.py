@@ -32,7 +32,7 @@ class Tree(object):
         self.means = None
 
         if root is None:
-            self.root = time.keys()[0]
+            self.root = list(time.keys())[0]
         else:
             self.root = root
 

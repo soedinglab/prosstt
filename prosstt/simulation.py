@@ -464,11 +464,11 @@ def simulate_branching_data(tree, tol=0.2, coefficients=None):
     if coefficients is None:
         groups = create_groups(tree.modules, tree.G)
         coefficients = {}
+        for branch in tree.time.keys():
+            coefficients[branch] = simulate_H(tree.modules, tree.G, groups)
 
     for branch in tree.time.keys():
         programs[branch] = simulate_W(tree.time[branch], tree.modules, cutoff=tol)
-        if coefficients is None:
-            coefficients[branch] = simulate_H(tree.modules, tree.G, groups)
         relative_means[branch] = np.dot(programs[branch], coefficients[branch])
 
     for b in tree.topology:
