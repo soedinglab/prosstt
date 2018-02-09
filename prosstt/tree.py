@@ -168,7 +168,7 @@ class Tree(object):
             path_length = [self.time[branch] for branch in path]
             total_lengths[i] = np.sum(path_length)
 
-        return np.max(total_lengths)
+        return int(np.max(total_lengths))
 
     def as_dictionary(self):
         """
@@ -308,3 +308,11 @@ class Tree(object):
             stack[i] = [prev, prev + stack[i]]
             prev = curr + prev
         return stack
+
+    def get_parallel_branches(self):
+        top_array = np.array(self.topology)
+        parallel = {}
+        for branch in np.unique(top_array[:, 0]):
+            matches = top_array[:, 0] == branch
+            parallel[branch] = top_array[matches, 1]
+        return parallel

@@ -14,12 +14,18 @@ PROSSTT can be installed using the `pip` package manager or any `pip`-compatible
 
 ### Dependencies
 
-PROSSTT was developed and tested in Python 3.5 and 3.6. While older Python 3 versions should work, there is no guarantee that they will. PROSSTT itself, the scripts, and `jupyter` notebooks included in the package, require the `numpy`, `scipy`, `pandas` and `matplotlib` libraries. We recommend using [scanpy](https://github.com/theislab/scanpy) to calculate diffusion maps in order to visualize the simulations, which requires [anndata](https://github.com/theislab/anndata) and Python 3.6 to work.
+PROSSTT was developed and tested in [Python 3.5](https://www.python.org/downloads/release/python-350/) and [3.6](https://www.python.org/downloads/release/python-360/). While older Python 3 versions should work, there is no guarantee that they will. PROSSTT requires:
 
-For more information about Jupyter notebooks, their installation, and their use, please refer to the [official documentation](http://jupyter.readthedocs.io/en/latest/install.html).
+* [`numpy`](www.numpy.org), for data structures
+* [`scipy`](https://www.scipy.org/), for probabilistic distributions and special functions
+* [`pandas`](https://pandas.pydata.org/), for I/O
+
+We also recommend the following libraries:
+
+* [`matplotlib`](https://matplotlib.org/), for plotting
+* [`jupyter`](http://jupyter.readthedocs.io/en/latest/index.html) notebooks, for demonstration and development purposes
+* [`scanpy`](https://github.com/theislab/scanpy), for the visualization of simulations via diffusion maps. This requires [anndata](https://github.com/theislab/anndata) and Python 3.6 to work.
 
 ### How to use
 
 We provide jupyter notebooks with a [baseline example](https://github.com/soedinglab/prosstt/blob/master/examples/minimal_example.ipynb), a more involved example that explains the choice of [variance parameters](https://github.com/soedinglab/prosstt/blob/master/examples/variance_sim.ipynb), and a notebook that showcases the different [sampling strategies](https://github.com/soedinglab/prosstt/blob/master/examples/density_sampling.ipynb).
-
-For more information, please refer to the [documentation](http://www.404errorpages.com/).
