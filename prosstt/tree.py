@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+"""
+This module contains the definition of the Tree class. The Tree class describes
+a lineage tree. Each object contains information about the topology
+of the lineage tree and the gene expression for each gene at each point of the
+tree.
+"""
+
 from collections import defaultdict
 import numpy as np
 import pandas as pd
@@ -43,21 +50,28 @@ class Tree(object):
             self.density = density
 
     @staticmethod
-    # assert branch_points>0
     def gen_random_topology(branch_points):
-        n = branch_points
-        b = 2 * n + 1
+        """
+        Generates a random topology for a lineage tree. At every branch point
+        a bifurcation is taking place.
+
+        Parameters
+        ----------
+        branch_points: int
+            The number of branch points in the topology
+        """
+        total_branches = 2 * branch_points + 1
         seeds = [0]
-        avail = list(reversed(range(1, b)))
+        avail = list(reversed(range(1, total_branches)))
         res = []
         while avail:
             root = np.random.choice(seeds)
-            a = avail.pop()
-            b = avail.pop()
-            res.append([root, a])
-            res.append([root, b])
-            seeds.append(a)
-            seeds.append(b)
+            branch_a = avail.pop()
+            branch_b = avail.pop()
+            res.append([root, branch_a])
+            res.append([root, branch_b])
+            seeds.append(branch_a)
+            seeds.append(branch_b)
             seeds.remove(root)
         return res
 
@@ -91,42 +105,42 @@ class Tree(object):
         """
         total_time = 0
         density = {}
-        for v in self.time.values:
-            total_time += v
+        for branch_time in self.time.values:
+            total_time += branch_time
 
         for k in self.time.keys():
             density[k] = np.array([1. / total_time] * np.int(self.time[k]))
         return density
 
-    def add_genes(self, Ms):
+    def add_genes(self, average_expression):
         """
         Sets the average gene expression trajectories of genes for all branches
         after performing a sanity check.
 
         Parameters
         ----------
-        Ms: float array
-            A list of arrays. List length is #branches and array Ms[b] has the
-            dimensions time[b], G.
+        average_expression: float array
+            A list of arrays. List length is #branches and array
+            average_expression[b] has the dimensions time[b], G.
         """
         # sanity check of dimensions so that in case a user messes up there is
         # no cryptic IndexOutOfBounds exception they have to trace.
-        if not len(Ms) == self.num_branches:
-            msg = "The number of arrays in Ms must be equal to the number of \
-                   branches in the topology"
+        if not len(average_expression) == self.num_branches:
+            msg = "The number of arrays in average_expression must be equal to \
+                   the number of branches in the topology"
             raise ValueError(msg)
 
-        for branch in Ms:
-            mean = Ms[branch]
+        for branch in average_expression:
+            mean = average_expression[branch]
             if not mean.shape == (self.time[branch], self.G):
                 msg = "Branch " + branch + " was expected to have a shape " \
                         + str((self.time[branch], self.G)) + " and instead is " \
                         + str(mean.shape)
                 raise ValueError(msg)
 
-        self.means = Ms
+        self.means = average_expression
 
-    def set_density(self, dens):
+    def set_density(self, density):
         """
         Sets the density as a function of the pseudotime and the branching. If
         N points from the tree were picked randomly, then the density is the
@@ -134,21 +148,21 @@ class Tree(object):
 
         Parameters
         ----------
-        dens: float array
-            A list of arrays. List length is #branches and len(dens[b]) equals
-            time[b].
+        density: dict
+            The density of each branch. For each branch b, len(density[b]) must
+            equal tree.time[b].
         """
-        if not len(dens) == self.branches:
-            msg = "The number of arrays in dens must be equal to the number \
+        if not len(density) == self.branches:
+            msg = "The number of arrays in density must be equal to the number \
                   of branches in the topology"
             raise ValueError(msg)
-        for i, d in enumerate(dens):
-            if not len(d) == self.time[i]:
+        for i, branch_density in enumerate(density):
+            if not len(branch_density) == self.time[i]:
                 msg = "Branch " + str(i) + " was expected to have a length " \
                       + str((self.time[i], self.G)) + " and instead is " \
-                      + str(d.shape)
+                      + str(branch_density.shape)
                 raise ValueError(msg)
-        self.density = dens
+        self.density = density
 
     def get_max_time(self):
         """
@@ -181,8 +195,8 @@ class Tree(object):
             The topology of the tree in dictionary form.
         """
         treedict = defaultdict(list)
-        for b in self.topology:
-            treedict[b[0]].append(b[1])
+        for branch_pair in self.topology:
+            treedict[branch_pair[0]].append(branch_pair[1])
         return(treedict)
 
     def paths(self, start):
@@ -209,8 +223,8 @@ class Tree(object):
         else:
             rooted_paths = []
             root = [start]
-            for v in treedict[start]:
-                usable = self.paths(v)
+            for node in treedict[start]:
+                usable = self.paths(node)
                 for path in usable:
                     rooted_paths.append(root + path)
             return rooted_paths
@@ -246,14 +260,14 @@ class Tree(object):
 
             if all(ends == np.max(ends)):
                 res.append([np.max(starts), np.max(ends) - 1])
-                for s in stacks:
-                    s.pop(0)
+                for stack in stacks:
+                    stack.pop(0)
             else:
                 res.append([np.max(starts), np.min(ends) - 1])
-                for s in stacks:
-                    if s[0][1] != np.min(ends):
-                        s.insert(1, [np.min(ends), s[0][1]])
-                    s.pop(0)
+                for stack in stacks:
+                    if stack[0][1] != np.min(ends):
+                        stack.insert(1, [np.min(ends), stack[0][1]])
+                    stack.pop(0)
 
             newstacks = [x for x in stacks if x]
             stacks = newstacks
@@ -278,10 +292,10 @@ class Tree(object):
         branch_time = defaultdict(list)
 
         branch_time[self.root] = [0, self.time[self.root] - 1]
-        for b in self.topology:
+        for branch_pair in self.topology:
             # the start time of b[1] is the end time of b[0]
-            b0_end = branch_time[b[0]][1]
-            branch_time[b[1]] = [b0_end + 1, b0_end + self.time[b[1]]]
+            b0_end = branch_time[branch_pair[0]][1]
+            branch_time[branch_pair[1]] = [b0_end + 1, b0_end + self.time[branch_pair[1]]]
         return branch_time
 
     # stacks = [self.morph_stack(ntime[np.array(x)].tolist()) for x in tpaths]
@@ -303,13 +317,15 @@ class Tree(object):
         """
         curr = 0
         prev = 0
-        for i in range(len(stack)):
-            curr = stack[i]
+        for i, curr in enumerate(stack):
             stack[i] = [prev, prev + stack[i]]
             prev = curr + prev
         return stack
 
     def get_parallel_branches(self):
+        """
+        Find the branches that run in parallel (i.e. share a parent branch).
+        """
         top_array = np.array(self.topology)
         parallel = {}
         for branch in np.unique(top_array[:, 0]):

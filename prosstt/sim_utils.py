@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""
+This module contains utility functions for the simulations, such as a printed
+progress bar, functions to perform quality checks, functions to create and
+assign groups, and functions to pick between alternatives when multiple options
+are possible.
+"""
 
 import collections
 from collections import defaultdict
@@ -40,7 +46,7 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1):
     if iteration == total:
         sys.stdout.write('\n')
     sys.stdout.flush()
-    
+
 
 def random_partition(k, iterable):
     """
@@ -65,7 +71,7 @@ def random_partition(k, iterable):
         x = random.randint(k+1)
         results[x].append(value)
     return results
-    
+
 
 def test_correlation(W, k, cutoff):
     """
@@ -82,8 +88,8 @@ def test_correlation(W, k, cutoff):
         between 0 and 1 but is not explicitly tested.
     """
     for i in range(k - 1, 0):
-        p = sp.stats.pearsonr(W[k], W[i])
-        if p[0] > cutoff:
+        pearson_r = sp.stats.pearsonr(W[k], W[i])
+        if pearson_r[0] > cutoff:
             return True
     return False
 
@@ -134,25 +140,30 @@ def bifurc_adjust(child, parent):
     dif = child[0] - parent[-1]
     child = child - dif
     return child
-    
 
-def pearson_between_programs(genes, a, b):
+
+def pearson_between_programs(genes, prog1, prog2):
     """
-    Lorem ipsum dolor et ames.
+    Calculate the pearson correlation coefficient between two expression
+    programs for all genes.
 
     Parameters
     ----------
-    a: int
-        Lorem ipsum
-    
+    genes: int
+        The number of genes in the lineage tree
+    prog1: ndarray
+        The first expression program
+    prog2: ndarray
+        The second expression program
+
     Returns
     -------
-    b: int
-        Lorem ipsum as well
+    pearson: ndarray
+        The pearson correlation coefficient for all genes in the two programs
     """
     pearson = np.zeros(genes)
-    for g in range(genes):
-        pearson[g] = sp.stats.pearsonr(a[:, g], b[:, g])[0]
+    for gene in range(genes):
+        pearson[gene] = sp.stats.pearsonr(prog1[:, gene], prog2[:, gene])[0]
     return pearson
 
 
@@ -216,7 +227,7 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
         The percentage of genes that must have anticorrelated expression
         patterns over pseudotime in order for the branches to be considered
         diverging
-    
+
     Returns
     -------
     diverging: ndarray
@@ -226,9 +237,9 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
     indices = flat_order(len(branches))
     diverging = np.zeros(len(indices), dtype=bool)
     for index, i, j in indices:
-        a = branches[i]
-        b = branches[j]
-        pearson = pearson_between_programs(genes, programs[a], programs[b])
+        br1 = branches[i]
+        br2 = branches[j]
+        pearson = pearson_between_programs(genes, programs[br1], programs[br2])
         percent_anticorrelated = sum(pearson < 0) / (genes * 1.0)
         diverging[index] = percent_anticorrelated > tol
     return diverging
@@ -267,11 +278,10 @@ def assign_branches(branch_times, timezone):
         A list of the possible branches for each timezone.
     """
     res = defaultdict(list)
-    for i in range(len(timezone)):
-        z = timezone[i]
+    for i, zone in enumerate(timezone):
         for k in branch_times:
-            b = branch_times[k]
-            if belongs_to(z, b):
+            branch_time = branch_times[k]
+            if belongs_to(zone, branch_time):
                 res[i].append(k)
     return res
 
@@ -308,7 +318,7 @@ def pick_branches(tree, pseudotime):
     ----------
     a: int
         Lorem ipsum
-    
+
     Returns
     -------
     b: int
@@ -320,15 +330,15 @@ def pick_branches(tree, pseudotime):
     for n, t in enumerate(pseudotime):
         branches[n] = pick_branch(t, timezone, assignments)
     return branches
-    
 
-def pick_branch(t, timezones, assignments):
+
+def pick_branch(pseudotime, timezones, assignments):
     """
     Picks one of the possible branches for a cell at a given time point.
 
     Parameters
     ----------
-    t: int
+    pseudotime: int
         A pseudotime point.
     timezones: int array
         The pseudotimes at which the timezones start and end.
@@ -340,17 +350,16 @@ def pick_branch(t, timezones, assignments):
     branch: int
         The branch to which the cell belongs.
     """
-    b = -1
-    for i in range(len(timezones)):
-        branch = timezones[i]
-        if t >= branch[0] and t <= branch[1]:
-            b = i
+    branch = -1
+    for i, zone in enumerate(timezones):
+        if pseudotime >= zone[0] and pseudotime <= zone[1]:
+            branch = i
             break
-    possibilities = assignments[b]
+    possibilities = assignments[branch]
     try:
         return random.choice(possibilities)
     except IndexError:
-        print(t)
+        print(pseudotime)
         print(timezones)
         print(assignments)
 
@@ -396,29 +405,29 @@ def are_lengths_ok(average_expression, abs_max=800, rel_dif=0.3):
     return max_crit and rel_crit
 
 
-def calc_scalings(N, scale=True, scale_v=0.7):
+def calc_scalings(cells, scale=True, scale_v=0.7):
     """
     Obtain library size factors for each cell.
 
     Parameters
     ----------
-    N: int
+    cells: int
         The number of cells
     scale: bool, optional
         Whether to simulate different scaling factors for each cell
     scale_v: float, optional
         The standard deviation of the library size distribution (log-normal
         distribution around 0)
-    
+
     Returns
     -------
     scalings: ndarray
         A library size factor for each cell
     """
     if scale:
-        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
+        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=cells))
     else:
-        scalings = np.ones(N)
+        scalings = np.ones(cells)
     return scalings
 
 
@@ -438,7 +447,7 @@ def process_timeseries_input(series_points, cells, point_std):
     point_std: float, list
         Standard deviation of cell density around each sample point. If it is a
         float, then it is the same for every sample point
-    
+
     Returns
     -------
     series_points: ndarray
