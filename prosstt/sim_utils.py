@@ -36,7 +36,7 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1):
         decimals: int, optional
             Positive number of decimals in percent complete.
     """
-    bar_length = shutil.get_terminal_size((80, 20))[0]
+    bar_length = 80
     format_str = "{0:." + str(decimals) + "f}"
     percent = format_str.format(100 * (iteration / float(total)))
     filled_length = int(round(bar_length * iteration / float(total)))
@@ -205,7 +205,7 @@ def calc_relat_means(tree, programs, coefficients):
     """
     relative_means = {}
     for branch in tree.branches:
-        relative_means[branch] = np.dot(programs[branch], coefficients[branch])
+        relative_means[branch] = np.dot(programs[branch], coefficients)
     return relative_means
 
 

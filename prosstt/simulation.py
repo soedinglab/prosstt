@@ -366,8 +366,6 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
         Expression matrix of the differentiation
     sample_pt: ndarray
         Pseudotime values of the sampled cells
-    branches: ndarray
-        The branch to which each simulated cell belongs
     scalings: ndarray
         Library size scaling factor for each cell
     """
@@ -383,7 +381,7 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
     tree.add_genes(Ms)
     alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
 
-    return _sample_data_at_times(tree, sample_time, alphas, betas)
+    return _sample_data_at_times(tree, sample_time, alpha=alphas, beta=betas)
 
 
 def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):

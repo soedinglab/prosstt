@@ -7,10 +7,11 @@ UMI count data for the simulated cells.
 
 import numpy as np
 import scipy as sp
+from scipy import stats
 from scipy.special import gamma as Gamma
 from scipy.special import loggamma
 
-def generate_negbin_params(tree, mean_alpha=0.2, mean_beta=1, a_scale=1.5, b_scale=1.5):
+def generate_negbin_params(tree, mean_alpha=0.2, mean_beta=2, a_scale=1.5, b_scale=1.5):
     """
     Generate default hyperparameters for the negative binomial distributions
     that are used to simulate UMI count data.
