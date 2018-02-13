@@ -1,63 +1,43 @@
+{% set version = "1.0" %}
+
 package:
   name: prosstt
-  version: "1.0"
+  version: {{ version }}
 
 source:
-  git_url: git@github.com:soedinglab/prosstt.git
-  git_rev: {{ commit_id }}
+  fn: prosstt-{{ version }}.tar.gz
+  url: https://github.com/soedinglab/prosstt/archive/v{{ version }}.tar.gz
+  sha256: 24437d4e3ba869b8f2c7f6ceee0d791d7abffbf640542cfac432516a2e5af3ff
 
 build:
-  script: pip install
   number: 0
-  skip: True  #  [not py3k]
-  entry_points:
-    - stammp-bsfinder = stammp.scripts.bsfinder:run
-    - stammp-preprocess = stammp.scripts.preprocess:run
-    - stammp-postprocess = stammp.scripts.postprocess:main
-    - stammp-normalize = stammp.scripts.normalize:run
-#    - stammp-normalizeFake = stammp.scripts.normalizeFake:run
-    - stammp-convert2quantile = stammp.scripts.convert2quantile:run
-#    - stammp-makeCenterBothEnds = stammp.plots.makeCenterBothEnds:run
-    - stammp-makeCenterBothEnds_bs = stammp.plots.makeCenterBothEnds_bs:main
-    - stammp-makeKmerPerPosition = stammp.plots.makeKmerPerPosition:run
-#    - stammp-remove5primeAdapter = stammp.scripts.utils.remove5primeAdapter:run
-    - stammp-removePCRduplicates = stammp.scripts.utils.removePCRduplicates:run
-    - stammp-makeNegSets = stammp.scripts.makeNegSets:run
-    - stammp-xxmotif = stammp.scripts.xxmotif:run
-    - stammp-makeKmerLogOdds = stammp.plots.makeKmerLogOdds:run
-#    - stammp-makeJaccard = stammp.plots.makeJaccard:run
-#    - stammp-getProcessingIndex = stammp.scripts.getProcessingIndex:run
-#    - stammp-getColocalization = stammp.scripts.getColocalization:run
-    - stammp-makeHeatMap = stammp.plots.makeHeatMap:run
-    - stammp-makeHeatMapSmall = stammp.plots.makeHeatMapSmall:run
-    - stammp-makeNucleotideProbabilities = stammp.plots.makeNucleotideProbabilities:run
-    - stammp-adapter-clipper = stammp.scripts.utils.clipper53:main
-#    - stammp-selectSitesInside = stammp.scripts.selectSitesInside:run
-#    - stammp-selectSitesAround = stammp.scripts.selectSitesAround:run
-#    - stammp-generateConfig = stammp.scripts.generate_config:main
-    - stammp-bam-postprocess = stammp.scripts.bam_postprocessing:main
-    - stammp-softclip-analyzer = stammp.scripts.utils.clipped_seq:main
-    - stammp-gffFilterSites = stammp.scripts.filter_sites:main
-    - stammp-annotate-table = stammp.scripts.utils.annotate_table:main
+  script: pip install
+  skip: True  # [py2k]
 
 requirements:
   build:
     - python
     - pip
-
   run:
-    - python
+    - python >=3.6
     - numpy
     - scipy
     - pandas
     - matplotlib
+    - jupyter
+    - scanpy
 
 test:
   imports:
     - prosstt
     - prosstt.tree
+    - prosstt.simulation
+    - prosstt.count_model
+    - prosstt.tree_utils
+    - prosstt.sim_utils
 
-  # requires:
-  #   - nose
-  # commands:
-  #   - nosetests stammp
+about:
+  home: https://github.com/soedinglab/prosstt/
+  license: GPL3
+  license_file: LICENSE
+  summary: "PROSSTT: PRObabilistic Simulations of ScRNA-seq Tree-like Topologies"
