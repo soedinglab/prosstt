@@ -1,222 +1,141 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""
+This module contains all the functions that produce simulations. This includes
+the simulation of expression programs, coefficients that map expr. programs to
+genes, and different sampling strategies for (pseudotime, branch) pairs.
+"""
+
+import sys
+import warnings
 
 import numpy as np
 from numpy import random
+import pandas as pd
 import scipy as sp
-from scipy.special import gamma as Gamma
-from scipy.special import loggamma
-from scipy import stats
-import random as rng
-import sys
-from collections import defaultdict
+
+from prosstt import sim_utils as sut
+from prosstt import count_model as cm
 
 
-def generate_negbin_params(tree, alpha=0.2, beta=1, a_scale=1.5, b_scale=1.5):
-    mu_a = np.log(alpha)
-    s2_a = np.log(a_scale)
-    mu_b = np.log(beta)
-    s2_b = np.log(b_scale)
-    alphas = np.exp(random.normal(loc=mu_a, scale=s2_a, size=tree.G))
-    betas = np.exp(random.normal(loc=mu_b, scale=s2_b, size=tree.G)) + 1
-    return alphas, betas
-
-
-def printProgress(iteration, total, prefix='', suffix='', decimals=1,
-                  barLength=100):
+def simulate_expression_programs(tree, tol):
     """
-    Call in a loop to create a terminal-friendly text progress bar. Contributed
-    by Greenstick on stackoverflow.com/questions/3173320.
+    Simulate the relative expression of the lineage tree expression programs
+    for each branch.
 
     Parameters
     ----------
-        iteration: int
-            Current iteration.
-        total: int
-            Total iterations.
-        prefix: str, optional
-            Prefix string.
-        suffix: str, optional
-            Suffix string.
-        decimals: int, optional
-            Positive number of decimals in percent complete.
-        barLength: int, optional
-            Character length of bar.
-    """
-    formatStr = "{0:." + str(decimals) + "f}"
-    percent = formatStr.format(100 * (iteration / float(total)))
-    filledLength = int(round(barLength * iteration / float(total)))
-    bar = '█' * filledLength + '-' * (barLength - filledLength)
-    sys.stdout.write('\r%s |%s| %s%s %s' % (prefix, bar, percent, '%', suffix)),
-    if iteration == total:
-        sys.stdout.write('\n')
-    sys.stdout.flush()
-
-
-def random_partition(k, iterable):
-    """
-    Random partition in almost equisized groups.
-
-    Parameters
-    ----------
-    k: int
-        How many partitions to create.
-    iterable: array
-        The iterable to be partitioned.
+    tol: float
+        Correlation cut-off between expression programs
 
     Returns
     -------
-    results: list of int lists
-
-
-    contributed by kennytm on stackoverflow.com/questions/3760752
+    programs: dict
+        Relative expression for all expression programs on every branch of the
+        lineage tree
     """
-    results = [[] for i in range(k)]
-    for value in iterable:
-        x = rng.randrange(k)
-        results[x].append(value)
-    return results
+    if tol > 1 or tol < 0:
+        raise ValueError("value of 'tol' parameter should be between 0 and 1")
+    programs = {}
+    for branch in tree.branches:
+        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules,
+                                           cutoff=tol)
+    return programs
 
 
-def lognegbin(x, theta):
+def sim_expr_branch(T, K, cutoff=0.5, max_loops=100):
     """
-    Alternative formulation of the negative binomial distribution pmf.
+    Return K diffusion processes of length T as a matrix W. The output of
+    sim_expr_branch is complementary to _sim_coeff_beta.
 
-    scipy does not support the extended definition so we have to supply it
-    ourselves.
+    W encodes how a group of K coexpressed genes will behave through
+    differentiation time. This matrix describes one branch of a
+    differentiation tree (between two branch points or between a branch point
+    and an endpoint). W describes the module in terms of relative expression
+    (from 0 to a small positive float, so from a gene not being expressed to a
+    gene being expressed at 2x, 3x of its "normal" level).
 
-    Parameters
-    ----------
-    x: int
-        The random variable.
-    theta: real array [p, r]
-        p is the probability of success of the Bernoulli test and r the number
-        of "failures".
+    After each new diffusion process is added the function checks whether the
+    new diffusion correlates with any of the older ones. If the correlation is
+    too high (above 0.5 per default), the last diffusion process will be
+    replaced with a new one until one is found that does not correlate with any
+    other columns of W or a suitable replacement hasn't been found after 100
+    tries.
 
-    Returns
-    -------
-    Probability that a discrete random variable is exactly equal to some value.
-    """
-    p, r = theta
-    if p == 0 and r == 0:
-        return 0
-    else:
-        return (loggamma(r + x) + np.log(1 - p) * r + np.log(p) * x -
-                (loggamma(r) + loggamma(x + 1)))
-
-
-def negbin(x, theta):
-    """
-    Alternative formulation of the negative binomial distribution pmf.
-
-    scipy does not support the extended definition so we have to supply it
-    ourselves.
-
-    Parameters
-    ----------
-    x: int
-        The random variable.
-    theta: real array [p, r]
-        p is the probability of success of the Bernoulli test and r the number
-        of "failures".
-
-    Returns
-    -------
-    Probability that a discrete random variable is exactly equal to some value.
-    """
-    p, r = theta
-    if p == 0 and r == 0:
-        return 1 if x == 0 else 0
-    else:
-        return (Gamma(r + x) * (1 - p)**r * p**x /
-                (Gamma(r) * sp.special.factorial(x)))
-
-
-def get_pr_amp(mu_amp, s2_amp, ksi):
-    """
-    Calculate parameters the negative binomial that describes the distribution
-    of the original transcripts before amplification. We make the (strong)
-    assumption that the amplification has no sequence bias and is the same for
-    all transcripts.
-
-    Parameters
-    ----------
-    mu_amp: float
-        Mean expression of the amplification.
-    s2_amp: float
-        Variance of the amplification.
-    ksi: int
-        Number of initial transcripts present.
-
-    Returns
-    -------
-    p_amp: float
-        The probability of success of the Bernoulli test.
-    r_amp: float
-        The number of "failures" of the Bernoulli test.
-    """
-    s2 = ksi * s2_amp
-    m = ksi * mu_amp
-    p_amp = (s2 - m) / s2 if s2 > 0 else 0
-    r_amp = (m**2) / (s2 - m) if s2 > 0 else 0
-    return p_amp, r_amp
-
-
-def get_pr_umi(a, b, m):
-    """
-    Calculate parameters for my_negbin from the mean and variance of the
-    distribution.
-
-    For single cell RNA sequencing data we assume that the distribution of the
-    transcripts is described by a negative binomial where the variance s^2
-    depends on the mean mu by a relation s^2 = a*mu^2 + b*mu.
-
-    Parameters
-    ----------
-    a: float
-        Coefficient for the quardratic term. Dominates for high mean expression.
-    b: float
-        Coefficient for the linear term. Dominates for low mean expression.
-    m: float
-        Mean expression of a gene.
-
-    Returns
-    -------
-    p: float
-        The probability of success of the Bernoulli test.
-    r: float
-        The number of "failures" of the Bernoulli test.
-    """
-    s2 = (a * m**2 + b * m)
-    p = (s2 - m) / s2 if s2>0 else 0
-    r = (m**2) / (s2 - m) if s2>0 else 0
-    return p, r
-
-
-def diffusion(T):
-    """
-    amortized diffusion process, usually between 0 and 1
+    Obviously this gets more probable the higher the number of components is -
+    it might be advisable to change the number of maximum loops allowed or
+    the cutoff in order to reduce runtime for a high number of components.
 
     Parameters
     ----------
     T: int
-        The length of the diffusion process (T steps).
+        The length of the branch of the differentiation tree
+    K: int
+        The number of components/modules of coexpression that describe the
+        differentiation in this branch of the tree
+    cutoff: float, optional
+        Correlation above the cut-off will be considered too much. Should be
+        between 0 and 1 but is not explicitly tested
+    max_loops: int, optional
+        The maximum number of times the method will try simulating a new
+        diffusion process that doesn't correlate with all previous ones in W
+        before resetting the matrix and starting over
+
+    Returns
+    -------
+    W: ndarray
+        Output array
+    """
+    W = np.zeros((K, T))
+    k = 0
+    loops = 0
+    while k < K:
+        W[k] = diffusion(T)
+
+        correlates = sut.test_correlation(W, k, cutoff)
+        if correlates:
+            # repeat and hope it works better this time
+            loops += 1
+            continue
+        else:
+            loops = 0
+            k += 1
+
+        if loops > max_loops:
+            # we tried so hard
+            # and came so far
+            # but in the end
+            # it doesn't even matter
+            return sim_expr_branch(T, K, cutoff=cutoff)
+
+    return np.transpose(W)
+
+
+def diffusion(steps):
+    """
+    Diffusion process with momentum term. Returns a random walk with values
+    usually between 0 and 1.
+
+    Parameters
+    ----------
+    steps: int
+        The length of the diffusion process.
 
     Returns
     -------
     W: float array
-        A diffusion process of length T.
+        A diffusion process with a specified number of steps.
     """
-    V = np.zeros(T)
-    W = np.zeros(T)
+    V = np.zeros(steps)
+    W = np.zeros(steps)
 
     W[0] = sp.stats.uniform.rvs()
     V[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
-    s_eps = 1 / T
+    s_eps = 1 / steps
     eta = sp.stats.uniform.rvs()
 
-    for t in range(0, T - 1):
+    for t in range(0, steps - 1):
         W[t + 1] = W[t] + V[t]
 
         epsilon = sp.stats.norm.rvs(loc=0, scale=s_eps)
@@ -231,97 +150,8 @@ def diffusion(T):
     return W
 
 
-def test_correlation(W, k, cutoff):
+def simulate_coefficients(tree, a=0.05, **kwargs):
     """
-    For a column of a matrix, test if previous columns correlate with it.
-
-    Parameters
-    ----------
-    W: numpy array
-        The matrix to test.
-    k: int
-        Compare columns from 0 to k-1 with column k.
-    cutoff: float
-        Correlation above the cut-off will be considered too much. Should be
-        between 0 and 1 but is not explicitly tested.
-    """
-    for i in range(k - 1, 0):
-        p = sp.stats.pearsonr(W[k], W[i])
-        if p[0] > cutoff:
-            return True
-    return False
-
-
-def simulate_W(T, K, cutoff=0.2, maxloops=100):
-    """
-    Return K diffusion processes of length T as a matrix.
-
-    The result of simulate_W is complementary to simulate_H.
-
-    W encodes how K modules of coexpressed genes will behave through
-    differentiation time. Each matrix W describes one branch of a
-    differentiation tree (between two branch points or between a branch point
-    and an endpoint). W describes the module in terms of relative expression
-    (from 0 to a small positive float, so from a gene not being expressed to a
-    gene being expressed at 2x, 3x of its "normal" level).
-
-    After each new diffusion process is added the function checks whether the
-    new diffusion correlates with any of the older ones. If the correlation is
-    too high (above 0.3 per default), the last diffusion process will be
-    replaced with a new one until one is found that does not correlate with any
-    other columns of W or a suitable replacement hasn't been found after 100
-    tries.
-
-    Obviously this gets more probable the higher the number of components is -
-    it might be advisable to change the number of maximum loops allowed or
-    the cutoff in order to reduce runtime for a high number of components.
-
-    Parameters
-    ----------
-    T: int
-        The length of the branch of the differentiation tree.
-    K: int
-        The number of components/modules of coexpression that describe the
-        differentiation in this branch of the tree.
-    cutoff: float, optional
-        Correlation above the cut-off will be considered too much. Should be
-        between 0 and 1 but is not explicitly tested.
-    maxloops: int, optional
-        The maximum number of times the method will try simulating a new
-        diffusion process that doesn't correlate with all previous ones in W
-        before resetting the matrix and starting over.
-    """
-    W = np.zeros((K, T))
-    k = 0
-    loops = 0
-    while k < K:
-        W[k] = diffusion(T)
-
-        correlates = test_correlation(W, k, cutoff)
-        if correlates:
-            # repeat and hope it works better this time
-            loops += 1
-            continue
-        else:
-            loops = 0
-            k += 1
-
-        if loops > maxloops:
-            # we tried so hard
-            # and came so far
-            # but in the end
-            # it doesn't even matter
-            return simulate_W(T, K, cutoff=cutoff)
-
-    return np.transpose(W)
-
-
-def simulate_H(K, G, groups, a=2, b=2):
-    """
-    Return sparse membership matrix for G genes in K groups.
-
-    The result of simulate_H is complementary to simulate_W.
-
     H encodes how G genes are expressed by defining their membership to K
     expression modules (coded in a matrix W). H could be told to encode
     metagenes, as it contains the information about which genes are coexpressed
@@ -329,762 +159,556 @@ def simulate_H(K, G, groups, a=2, b=2):
     a module on a gene is measured by a number between 0 and 1, drawn from a
     (symmetric, if used with default values) beta distribution.
 
+    The result of simulate_H is complementary to sim_expr_branch.
+
     Parameters
     ----------
-    K: int
-        Number of modules.
-    G: int
-        Number of genes.
-    groups: array of int arrays
-        groups[i] contains all genes whose expression is influenced by module i
-    a: float
-        First shape parameter of beta distribution, should be positive.
-    b: float
-        Second shape parameter of beta distribution, should be positive.
+    tree: Tree
+
+    a: float, optional
+        Shape parameter of Gamma distribution or first shape parameter of Beta
+        distribution
+    **kwargs: float
+        Additional parameter (float b) if Beta distribution is to be used
+
+    Returns
+    -------
+    A sparse matrix of the contribution of K expression programs to G genes.
     """
-    H = np.zeros((K, G))
+    if "a" not in kwargs.keys():
+        warnings.warn(
+            "No argument 'a' specified in kwargs: using gamma and a=0.05", UserWarning)
+        return _sim_coeff_gamma(tree, a)
+    # if a, b are present: beta distribution
+    if "b" in kwargs.keys():
+        groups = sut.create_groups(tree.modules, tree.G)
+        return _sim_coeff_beta(tree, groups)
+    else:
+        return _sim_coeff_gamma(tree, a=kwargs['a'])
 
-    for k in range(K):
-        for g in groups[k]:
-            H[k][g] += sp.stats.beta.rvs(a, b)
 
+def _sim_coeff_beta(tree, groups, a=2, b=2):
+    """
+    Draw weights for the contribution of tree expression programs to gene
+    expression from a Beta distribution.
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+    groups: list of ints
+        A list of the two modules to which each gene belongs
+    a: float, optional
+        First shape parameter of the Beta distribution
+    b: float, optional
+        Second shape parameter of the Beta distribution
+
+    Returns
+    -------
+    H: ndarray
+        Output array
+    """
+    H = np.zeros((tree.modules, tree.G))
+    for k in range(tree.modules):
+        for gene in groups[k]:
+            H[k][gene] += sp.stats.beta.rvs(a, b)
     return H
 
 
-def create_groups(K, G):
+def _sim_coeff_gamma(tree, a=0.05):
     """
-    Returns a list of the groups to which each gene belongs.
-
-    Each gene G is assigned one of K possible groups twice (random draw with
-    replacement).
+    Draw weights for the contribution of tree expression programs to gene
+    expression from a Gamma distribution.
 
     Parameters
     ----------
-    K: int
-        Number of modules.
-    G: int
-        Number of genes.
+    tree: Tree
+        A lineage tree
+    a: float, optional
+        Shape parameter of the Gamma distribution
 
     Returns
     -------
-    groups: list of ints
-        A list of the two modules to which each gene belongs.
+    H: ndarray
+        Output array
     """
-    genes = np.random.permutation(G)
-    # we want each gene to appear in two groups, in average.
-    # If we draw twice it will happen that some genes will take the same
-    # group twice, but it should not happen too often.
-    groups1 = random_partition(K, genes)
-    # performing the permutation a second time is necessary, else most genes
-    # will be in the same modules and we want to mix more
-    genes = np.random.permutation(G)
-    groups2 = random_partition(K, genes)
-    groups = [[i for subz in z for i in subz] for z in zip(groups1, groups2)]
-    return groups
-
-
-def bifurc_adjust(Mu_bif, Mu):
-    """
-    Adjust two matrices so that the last line of one equals the first of the
-    other.
-
-    Move each gene so that its starting mean after the bifurcation is the same
-    as the mean it had just before the bifurcation.
-
-    Parameters
-    ----------
-    Mu_bif: numpy array of shape KxG
-
-    Mu: float matrix
-    """
-    # dif = Mu[-1] / Mu_bif[0]
-    # Mu_bif = Mu_bif * dif
-    dif = Mu_bif[0] - Mu[-1]
-    Mu_bif = Mu_bif - dif
-    # Mu_bif[Mu_bif < 0] = 0.1
-    return Mu_bif
-
-
-def simulate_branching_data(tree, tol=0.2, HH=None):
-    """
-    simulate the matrices that describe the branches of the differentiation
-    tree.
-
-    In order to simulate a branching differentiation tree we are going to
-    simulate every branch of it as an independent, linear differentiation.
-
-         --1-
-    --0-|      --3-
-         --2-|
-              --4-
-
-    For each branch we will simulate how K gene modules will behave over T
-    pseudotime units (W). Then we will assign each gene to (in average) 2
-    modules (H). Multiplying W with H results in a matrix of shape TxG, which
-    describes how each gene behaves during differentiation time. Scaling each
-    column of that matrix with a starting value will convert the gene
-    expression values from relative (0-X% of gene expression level) to
-    absolute.
-
-    In case the user calls this function directly, it is important that the Ts
-    contained in the tree object are ordered correctly, as each branch can,
-    theoretically have different length. A tree with 5 branches and a topology
-    [[0,1], [0,2], [2,3], [2,4]] will look like this:
-
-            -- T[1]-
-    -T[0]--|          -- T[3]-
-            -- T[2]--|
-                      -- T[4]-
-    timezones:
-    ---0---|----1----|----2----
-
-    and should have the appropriate T values at the correct positions.
-
-    It is recommended that branches at the same timezone have the same length
-    (pseudotime duration T), or failing that at least comparable lengths, as
-    the diffusion processes that govern how the mean expression levels of
-    genes move (and that are crucial for separating the cells after
-    dimensionality reduction) move in small increments, and thus need some
-    time to separate branches from each other.
-
-    Parameters
-    ----------
-    tree: Tree object
-        Contains information about the topology of the tree that is to be
-        simulated.
-    """
-    G = tree.G
-    branches = tree.branches
-    Ts = tree.time
     K = tree.modules
-    groups = create_groups(K, G)
+    G = tree.G
+    coefficients = np.reshape(sp.stats.gamma.rvs(a, size=K * G), (K, G))
+    return coefficients
 
-    if not len(Ts) == branches:
-        print("the parameters are not enough for %i branches" % branches)
+
+def simulate_lineage(tree, intra_branch_tol=0.4, inter_branch_tol=0.5, **kwargs):
+    """
+    Simulate gene expression for each point of the lineage tree (each
+    possible pseudotime/branch combination). The simulation will try to make
+    sure that a) gene expression programs within the same branch don't correlate
+    too heavily and b) gene expression programs in parallel branches diverge
+    enough.
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+    intra_branch_tol: float, optional
+        The threshold for correlation between expression programs in the same
+        branch
+    inter_branch_tol: float, optional
+        The threshold for anticorrelation between relative gene expression in
+        parallel branches
+    **kwargs: various, optional
+        Accepts parameters for coefficient simulation; float a if coefficients
+        are generated by a Gamma distribution or floats a, b if the coefficients
+        are generated by a Beta distribution
+
+    Returns
+    -------
+    relative_means: Series
+        Relative mean expression for all genes on every lineage tree branch
+    programs: Series
+        Relative expression for all expression programs on every branch of the
+        lineage tree
+    coefficients: ndarray
+        Array that contains the contribution weight of each expr. program for
+        each gene
+    """
+    if not len(tree.time) == tree.num_branches:
+        print("the parameters are not enough for %i branches" %
+              tree.num_branches)
         sys.exit(1)
 
-    # define the W, H and Mu matrix containers for all branches
-    Ws = [np.zeros((Ts[i], K)) for i in range(branches)]
-    if HH is None:
-        Hs = [np.zeros((K, G)) for i in range(branches)]
-    else:
-        Hs = HH
-    Ms = [np.zeros((Ts[i], G)) for i in range(branches)]
+    coefficients = simulate_coefficients(tree, **kwargs)
+    programs = simulate_expression_programs(tree, intra_branch_tol)
 
-    all_groups = []
-    for i in range(branches):
-        T = Ts[i]
+    # check that parallel branches don't overlap too much
+    programs, relative_means = correct_parallel(tree, programs, coefficients, intra_branch_tol, inter_branch_tol)
 
-        W = simulate_W(T, K, cutoff=tol)
-        if HH is None:
-            H = simulate_H(K, G, groups)
-            Hs[i] = H
-        else:
-            H = HH[i]
-        Mu = np.dot(W, H)
-
-        Ws[i] = W
-        Ms[i] = Mu
-        all_groups.append(groups)
-
+    # adjust the ends of the relative mean expression matrices
     for b in tree.topology:
-        Ms[b[1]] = bifurc_adjust(Ms[b[1]], Ms[b[0]])
+        relative_means[b[1]] = sut.bifurc_adjust(relative_means[b[1]], relative_means[b[0]])
 
-    return Ms, Ws, Hs
+    return (pd.Series(relative_means),
+            pd.Series(programs),
+            coefficients)
 
 
-def sample_data(N, G, tree, sample_times, sample_spreads, c_spread=10,
-                alpha=0.3, beta=2, verbose=True, scale_v=0.7):
+def correct_parallel(tree, programs, coefficients, intra_branch_tol=0.2, inter_branch_tol=0.5):
     """
-    simulates an NxG count matrix and returns it with the labels and the
-    branch information of the cells.
-
-    Assuming that we know how the mean expression of all genes is supposed to
-    be at any time point of every possible branch of the differentiation (see
-    simulate_branching_data), we can simulate how a real scRNAseq experiment
-    would be conducted - as a time series. We would sample cells from our
-    population at certain sample timepoints. The cells in each sample, since
-    differentiation is asynchronous, would not be at the same differentiation
-    stage, but rather spread around it. Also, while we would try to sample the
-    same number of cells from each time point, this is not possible when using
-    a pipette, so we would expect slight imbalances in the number of cells at
-    each time point.
-
-    The simulation is structured exactly like that: a list of S sample times
-    marks the differentiation stages around which the cells are currently
-    spread. We can control how high this spread is going to be (effectively
-    controlling how synchronous the differentiation goes). We want to
-    "sequence" N cells - that means that we should collect ~N/S cells around
-    each sample time. Then, knowing the duration of each branch/timezone it is
-    easy to decide to which branch each sampled time point belongs to, go to
-    the means matrix of that branch, map the time to a row of the matrix and
-    then use this row as the means of the negative binomial distributions that
-    describe how transcript counts are distributed. Sampling these
-    distributions gives us a realistic cell.
-
-    Along the simulation we can keep the information about the pseudotime of
-    each cell ("labels") as well as which branch each cell is assigned to
-    ("branch").
+    Check if parallel branches diverge and if not re-draw the expression
+    programs for these branches.
 
     Parameters
     ----------
-    N: int
-        Number of cells that should (approximately) be sampled.
-    G: int
-        Number of genes.
-    tree: Tree object
-        The tree that describes the differentiation procedure.
-    sample_times: int array
-        The pseudotime points around which the cells are sampled.
-    sample_spreads: float array
-        The variance with which the cells are distributed around the sample
-        points.
-    c_spread: float, optional
-        The variance with which we will sample how many cells will be sampled
-        around each sample time.
-    alpha: float, optional
-        Coefficient for the quardratic term of the negative binomial variance.
-    beta: float, optional
-        Coefficient for the linear term of the negative binomial variance.
-    verbose: boolean, optional
-        If True, run method in verbose mode, printing out a progress bar.
+    tree: Tree
+        A lineage tree
+    programs: dict
+        Relative expression for all expression programs on every branch of the
+        lineage tree
+    coefficients: ndarray
+        A sparse matrix of the contribution of K expression programs to G genes
+    intra_branch_tol: float, optional
+        The threshold for correlation between expression programs in the same
+        branch
+    inter_branch_tol: float, optional
+        The threshold for anticorrelation between relative gene expression in
+        parallel branches
 
     Returns
     -------
-    X: int array
-        simulated single cell RNA seq experiment.
-    labels: int array
-        The pseudotimes at which each cell was sampled. Corresponds to the
-        rows of X.
-    branch:
-        The branch of the differentiation tree to which each cell belongs.
-        Corresponds to the rows of X.
+    programs: dict
+        Relative expression for all expression programs on every branch of the
+        lineage tree
+    relative_means: dict
+        Relative gene expression for each tree branch
     """
-
-    # how many cells do we get from each time point?
-    # we want to have ~N cells in the end, so divide N by the sample point size
-    n_cells = (N * 1.) / len(sample_times)
-    cell_spread = np.sqrt(c_spread)
-    # we sample n_cells in each sample point, but we lose some for technical
-    # reasons
-    cells = sp.stats.norm.rvs(loc=n_cells, scale=cell_spread,
-                              size=len(sample_times))
-    cells = np.abs(cells)
-    cells = cells.astype(int)
-
-    timestamps = []
-
-    # sample from the total time. It starts at 0 and ends at total_time
-    total_time = tree.get_max_time()
-    for tp, n in zip(sample_times, cells):
-        # print(tp, n, total_time)
-        timestamps.extend(collect_timestamps(tp, n, total_time,
-                          t_s=sample_spreads))
-    return sample_data_at_times(cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=verbose, scale_v=scale_v)
+    # calculate relative means over tree
+    relative_means = sut.calc_relat_means(tree, programs, coefficients)
+    # find parallel branches
+    parallel = tree.get_parallel_branches()
+    # for all parallel branches check if they are diverging.
+    # if not, fix.
+    for key in parallel:
+        diverges = sut.diverging_parallel(parallel[key], relative_means,
+                                          tree.G, tol=inter_branch_tol)
+        while not all(diverges):
+            for branch in parallel[key]:
+                programs[branch] = sim_expr_branch(tree.time[branch],
+                                                   tree.modules,
+                                                   cutoff=intra_branch_tol)
+                relative_means[branch] = np.dot(programs[branch], coefficients)
+            diverges = sut.diverging_parallel(parallel[key], relative_means,
+                                              tree.G, tol=inter_branch_tol)
+    return programs, relative_means
 
 
-def sample_data_at_times(cells, G, tree, timestamps, alpha=0.3, beta=2,
-                         scale_v=0.7, branches=None, verbose=True, scale=True):
+def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1):
     """
-    Given the pseudotime labels of N cells, this function simulates an NxG
-    count matrix. Along the simulation we can keep the information about the
-    pseudotime of each cell ("labels") as well as which branch each cell is
-    assigned to ("branch").
+    Bare-bones simulation where the lineage tree is simulated using default
+    parameters. Branches are assigned randomly if multiple are possible.
 
     Parameters
     ----------
-    cells: int
-        Number of cells to be sampled - either at every pseudotime point or
-        in total.
-    G: int
-        Number of genes.
-    tree: Tree object
-        The tree that describes the differentiation procedure.
-    timestamps: int array
-        The pseudotime point each cell will be sampled at.
+    tree: Tree
+        A lineage tree
     alpha: float, optional
-        Coefficient for the quardratic term of the negative binomial variance.
+        Average alpha value
     beta: float, optional
-        Coefficient for the linear term of the negative binomial variance.
-    verbose: boolean, optional
-        If True, run method in verbose mode, printing out a progress bar.
+        Average beta value
+    gene_loc: float, optional
+        Mean of the log-normal distribution of base gene expression values
+    gene_s: float, optional
+        Standard deviation of base gene expression value distribution
+        (log-normal)
 
     Returns
     -------
-    X: int array
-        simulated single cell RNA seq experiment.
-    labels: int array
-        The pseudotimes at which each cell was sampled. Corresponds to the
-        rows of X.
-    branch:
-        The branch of the differentiation tree to which each cell belongs.
-        Corresponds to the rows of X.
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    sample_pt: ndarray
+        Pseudotime values of the sampled cells
+    scalings: ndarray
+        Library size scaling factor for each cell
     """
-    # the final result
-    N = np.sum(cells)
-    X = np.zeros((N, G))
-
-    labels = np.zeros(N)
-    branch = np.zeros(N)
-    if scale:
-        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
-    else:
-        scalings = np.ones(N)
-
-    # timezone is the part of the tree between two branch points or
-    # a branch point and an endpoint
-    timezone = tree.populate_timezone()
-    branching_times = tree.branch_times()
-    assignments = assign_branches(branching_times, timezone)
-
-    custm = my_negbin()
-
-    for n, timestamp in enumerate(timestamps):
-        t = int(timestamp)
-        if branches is None:
-            b = pick_branch(t, timezone, assignments)
-        else:
-            b = branches[n]
-        T_off = branching_times[b][0]
-        M = tree.means[b]
-
-        for g in range(G):
-            try:
-                mu = M[t - T_off][g] * scalings[n]
-            except IndexError:
-                mu = M[-1][g] * scalings[n]
-            p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
-            X[n][g] = custm.rvs(p, r)
-            labels[n] = t
-            branch[n] = b
-
-        if verbose:
-            printProgress(n, len(timestamps))
-
-    return X, labels, branch, scalings
-
-
-def sample_data_with_absolute_times(n_factor, G, tree, sample_times, alpha=0.3,
-                                    beta=2, verbose=True, branches=None,
-                                    scale_v=0.7):
-    """
-    simulates an NxG count matrix and returns it with the labels and the
-    branch information of the cells.
-
-    This version of the simulation function will sample all time points in
-    "times" n_factor times. This is meant to aid in the development and
-    debugging of the function, as it provides optimal conditions for a smooth
-    tree in G-dimensional space, as it is easy to provide an array 1:T_max and
-    make sure all possible time points are sampled.
-
-    Along the simulation we can keep the information about the pseudotime of
-    each cell ("labels") as well as which branch each cell is assigned to
-    ("branch").
-
-    Parameters
-    ----------
-    n_factor: int
-        Number of times to sample each point in times
-    G: int
-        Number of genes.
-    tree: Tree object
-        The tree that describes the differentiation procedure.
-    alpha: float, optional
-        Coefficient for the quardratic term of the negative binomial variance.
-    beta: float, optional
-        Coefficient for the linear term of the negative binomial variance.
-    verbose: boolean, optional
-        If True, run method in verbose mode, printing out a progress bar.
-
-    Returns
-    -------
-    X: int array
-        simulated single cell RNA seq experiment.
-    labels: int array
-        The pseudotimes at which each cell was sampled. Corresponds to the
-        rows of X.
-    branch:
-        The branch of the differentiation tree to which each cell belongs.
-        Corresponds to the rows of X.
-    """
-    # how many cells do we get from each time point?
-    # we want to have ~N cells in the end, so divide N by the sample point size
-    n_cells = int(n_factor * len(sample_times))
-    # we want n_factor cells at each sample
-    timestamps = np.repeat(sample_times, n_factor)
-
-    return sample_data_at_times(n_cells, G, tree, timestamps, alpha=alpha,
-                                beta=beta, verbose=True, branches=branches,
-                                scale_v=0.6,)
-
-
-def restricted_simulation(t, alpha=0.2, beta=3, mult=2, gene_loc=0.8, gene_s=1):
-    sample_time = np.arange(0, t.get_max_time())
-    Ms = None
-    while not are_lengths_ok(Ms):
-        uMs, Ws, Hs = simulate_branching_data(t)
-        gene_scale = np.exp(sp.stats.norm.rvs(loc=gene_loc, scale=gene_s, size=t.G))
-        Ms = [np.zeros((t.time[i], t.G)) for i in range(t.branches)]
-        for i in range(t.branches):
+    sample_time = np.arange(0, tree.get_max_time())
+    gene_scale = np.exp(sp.stats.norm.rvs(
+        loc=gene_loc, scale=gene_s, size=tree.G))
+    Ms = {}
+    while not sut.are_lengths_ok(Ms):
+        uMs, Ws, Hs = simulate_lineage(tree, a=0.05)
+        for i in tree.branches:
             Ms[i] = np.exp(uMs[i]) * gene_scale
-            
-    t.add_genes(Ms)
-    alphas, betas = generate_negbin_params(t, alpha=alpha, beta=beta)
 
-    X, labs, brns, scalings = sample_data_with_absolute_times(mult, t.G, t,
-                                                              sample_time,
-                                                              alphas, betas)
-    return X, labs, brns, scalings
+    tree.add_genes(Ms)
+    alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
+
+    return _sample_data_at_times(tree, sample_time, alpha=alphas, beta=betas)
 
 
-def sample_density(t, N, alpha=0.2, beta=3, mult=1):
+def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
     """
-    Pick random cells from a tree according to its density profile.
+    Simulate the expression matrix of a differentiation if the data came from
+    a time series experiment.
+
+    Taking a sample from a culture of differentiating cells returns a mixture of
+    cells at different stages of progress through differentiation (pseudotime).
+    A time series experiment consists of sampling at multiple time points. This
+    is simulated by drawing normally distributed pseudotime values around
+    pseudotime sample points.
 
     Parameters
     ----------
-    t: Tree object
-        The tree that describes the differentiation procedure.
-    N: int
-        The number of cells to be sampled.
-    alpha: float, optional
-        Coefficient for the quardratic term of the negative binomial variance.
-    beta: float, optional
-        Coefficient for the linear term of the negative binomial variance.
-    mult: int, optional
-        How many times each sample time should be sampled.
+    tree: Tree
+        A lineage tree
+    cells: list or int
+        If a list, then the number of cells to be sampled from each sample
+        point. If an integer, then the total number of cells to be sampled
+        (will be divided equally among all sample points)
+    series_points: list
+        A list of the pseudotime sample points
+    point_std: list or float
+        The standard deviation with which to sample around every sample point.
+        Use a list for differing std at each time point.
+    alpha: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    beta: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    scale: True, optional
+        Apply cell-specific library size factor to average gene expression
+    scale_v: float, optional
+        Variance for the drawing of scaling factors (library size) for each cell
+    verbose: bool, optional
+        Print a progress bar or not
 
     Returns
     -------
-    X: int array
-        simulated single cell RNA seq experiment.
-    labels: int array
-        The pseudotimes at which each cell was sampled. Corresponds to the
-        rows of X.
-    branch:
-        The branch of the differentiation tree to which each cell belongs.
-        Corresponds to the rows of X.
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    sample_pt: ndarray
+        Pseudotime values of the sampled cells
+    branches: ndarray
+        The branch to which each simulated cell belongs
+    scalings: ndarray
+        Library size scaling factor for each cell
     """
-    hybrid = [np.zeros((t.time[b], 2)) for b in range(t.branches)]
+    series_points, cells, point_std = sut.process_timeseries_input(series_points, cells, point_std)
+    pseudotimes = []
 
-    pseudotimes = [np.arange(t) for t in t.time]
-    ps_branches = [b*np.ones(t.time[b]) for b in range(t.branches)]
-    for top in t.topology:
-        pseudotimes[top[1]] += pseudotimes[top[0]][-1] + 1
-
-    for b in range(t.branches):
-        hybrid[b][:,0] = pseudotimes[b]
-        hybrid[b][:,1] = ps_branches[b]
-
-    elements = np.array([pt for p in hybrid for pt in p])
-    probabilities = [dn for d in t.density for dn in d]
-
-    sample = np.random.choice(np.arange(len(probabilities)), N, p=probabilities)
-    sample_time = elements[sample, 0].astype(int)
-    sample_branches = elements[sample, 1].astype(int)
-
-    X, labels, branch, scalings = sample_data_with_absolute_times(mult, t.G, t, sample_time,
-                            alpha=alpha, beta=beta, branches=sample_branches)
-    return X, labels, branch, scalings
+    max_time = tree.get_max_time()
+    for t, n, var in zip(series_points, cells, point_std):
+        times_around_t = draw_times(t, n, max_time, var)
+        pseudotimes.extend(times_around_t)
+    return _sample_data_at_times(tree, pseudotimes, alpha=alpha, beta=beta,
+                                 scale=scale, scale_v=scale_v, verbose=verbose)
 
 
-def assign_branches(branch_times, timezone):
+def draw_times(timepoint, no_cells, max_time, var=4):
     """
-    Assigns a branch to every timezone.
-
-            -- T[1]------
-    -T[0]--|          -- T[3]------
-            -- T[2]--|
-                      -- T[4]-
-    timezones:
-    ---0---|----1----|-2-|-3--|-4--
-
-    tz   br
-    0    0
-    1    1,2
-    2    1,3,4
-    3    3,4
-    4    3
-
-    A time point in timezone i can belong to one of k possible branches
-
-    Parameters
-    ----------
-    branch_times: list of int lists
-        The pseudotime at which branches start and end.
-    timezone: int array
-        Array that contains the timezone information for each pseudotime point.
-
-    Returns
-    -------
-    res: list of int lists
-        A list of the possible branches for each timezone.
-    """
-    res = defaultdict(list)
-    for i in range(len(timezone)):
-        z = timezone[i]
-        for k in branch_times:
-            b = branch_times[k]
-            if belongs_to(z, b):
-                res[i].append(k)
-    return res
-
-
-def belongs_to(timezone, branch):
-    """
-    Checks whether a timezone start and end are contained within the
-    pseudotime of a branch.
-
-    Timezones are constructed such that they don't go over branch boundaries.
-    This method is used to determine which branches are possible for a
-    timezone.
-
-    Parameters
-    ----------
-    timezone: int array
-        The pseudotime at which the timezone starts and ends.
-    branch: int array
-        The pseudotime at which the branch starts and ends.
-
-    Returns
-    -------
-    bool
-        Whether the timezone is contained within the branch.
-    """
-    return (timezone[0] >= branch[0]) and (timezone[1] <= branch[1])
-
-
-def pick_branch(t, timezones, assignments):
-    """
-    Picks one of the possible branches for a cell at a given time point.
-
-    Parameters
-    ----------
-    t: int
-        A pseudotime point.
-    timezones: int array
-        The pseudotimes at which the timezones start and end.
-    assignments: int array
-        A list of the possible branches for each timezone.
-
-    Returns
-    -------
-    branch: int
-        The branch to which the cell belongs.
-    """
-    b = -1
-    for i in range(len(timezones)):
-        branch = timezones[i]
-        if t >= branch[0] and t <= branch[1]:
-            b = i
-            break
-    possibilities = assignments[b]
-    try:
-        return rng.choice(possibilities)
-    except IndexError:
-        print(t)
-        print(timezones)
-        print(assignments)
-
-
-def collect_timestamps(timepoint, n, Tmax, t_s=4):
-    """
-    Samples around a timepoint.
-
-    This function simulates how a differentiating cell population would look
-    at a time point when the mean differentiation stage would be at pseudotime
-    t, with cells be spread around t. Since we are sampling a discrete space
-    we need to round the samples. We can control the asynchronicity via the
-    variance of the normal distribution.
+    Draw cell pseudotimes around a certain sample time point under the
+    assumption that in an asynchronously differentiating population cells are
+    normally distributed around t. The variance of the normal distribution
+    controls the speed of differentiation (high spread: transient state/fast
+    differentiation, low spread: bottleneck/slow differentiation).
 
     Parameters
     ----------
     timepoint: int
         The pseudotime point that represents the current mean differentiation
         stage of the population.
-    n: int
+    no_cells: int
         How many cells to sample.
-    Tmax: int
+    max_time: int
         All time points that exceed the differentiation duration will be
         mapped to the end of the differentiation.
-    t_s: float, optional
+    var: float, optional
         Variance of the normal distribution we use to draw pseudotime points.
         In the experiment metaphor this parameter controls synchronicity.
 
     Returns
     -------
-    timestamps: int array
+    sample_pt: int array
         Pseudotime points around <timepoint>.
     """
-    timestamps = sp.stats.norm.rvs(loc=timepoint, scale=t_s, size=n)
-    timestamps = timestamps.astype(int)
-    timestamps[timestamps < 0] = 0
-    timestamps[timestamps >= Tmax] = Tmax - 1
-    return timestamps
+    sample_pt = sp.stats.norm.rvs(loc=timepoint, scale=var, size=no_cells)
+    sample_pt = sample_pt.astype(int)
+    sample_pt[sample_pt < 0] = 0
+    sample_pt[sample_pt >= max_time] = max_time - 1
+    return sample_pt
 
 
-class my_negbin(sp.stats.rv_discrete):
+def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
     """
-    Class definition for the alternative negative binomial pmf so that we can
-    sample it using rvs().
-    """
-    def _pmf(self, x, p, r):
-        theta = [p, r]
-        res = np.exp(lognegbin(x, theta))
-        res = np.real(res)
-        return res.astype("float")
-
-
-class sum_negbin(sp.stats.rv_discrete):
-    """
-    Class definition for the convoluted negative binomial pmf that describes
-    non-UMI data.
-    """
-    def _pmf(self, x, mu_amp, s_amp, p, r):
-        theta = [p, r]
-        ksis = np.arange(2 * int(x) + 3)
-        res = 0
-
-        for ksi in ksis:
-            p_amp, r_amp = get_pr_amp(mu_amp, s_amp, ksi)
-            theta_amp = [p_amp, r_amp]
-            # print(theta_amp)
-            # print(negbin(x, theta_amp), negbin(ksi, theta))
-            tmp = lognegbin(x, theta_amp) + lognegbin(ksi, theta)
-            res += np.real(np.exp(tmp))
-        return res.astype("float")
-
-# def rescale_branch(M_adjust, M_norm):
-#     adjust_range = np.ptp(M_adjust, axis=0)
-#     norm_range = np.ptp(M_norm, axis=0)
-
-#     # choose the upper threshold for the rescaling
-#     # should not be <-25% of the branch we adjust to
-#     upper = np.mean(norm_range)
-#     lower = upper - upper/4.
-
-#     scale_by = np.random.randint(low=lower, high=upper) / scale_to
-
-#    M_adjust = round(apply(data[less,], 1, function(x) rescale(x, to=c(min(x),
-#    max(x)*scale_by))))
-
-
-def are_lengths_ok(Ms=None, abs_max=800, rel_dif=0.3):
-    """
-    Performs a quality check for the matrix of average gene expressions for all
-    branches.
-
-    Specifically, it is required that no gene has a mean expression value above
-    a certain cutoff and that no branch has a maximum average expression that
-    is an order of magnitude above the other branches.
+    Use cell density along the lineage tree to sample pseudotime/branch pairs
+    for the expression matrix.
 
     Parameters
     ----------
-    timezone: int array
-        The pseudotime at which the timezone starts and ends.
-    branch: int array
-        The pseudotime at which the branch starts and ends.
+    tree: Tree
+        A lineage tree
+    N: int
+        Number of cells to sample
+    alpha: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    beta: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    scale: True, optional
+        Apply cell-specific library size factor to average gene expression
+    scale_v: float, optional
+        Variance for the drawing of scaling factors (library size) for each cell
+    verbose: bool, optional
+        Print a progress bar or not
 
     Returns
     -------
-    bool
-        Whether the timezone is contained within the branch.
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    sample_pt: ndarray
+        Pseudotime values of the sampled cells
+    branches: ndarray
+        The branch to which each simulated cell belongs
+    scalings: ndarray
+        Library size scaling factor for each cell
     """
-    # worked out kinda ok
-    if Ms is None:
-        return False
+    bt = tree.branch_times()
 
-    max_crit = False
-    rel_crit = False
+    possible_pt = [np.arange(bt[b][0], bt[b][1] + 1) for b in tree.branches]
+    possible_branches = [[b] * tree.time[b] for b in tree.branches]
+    probabilities = [tree.density[b] for b in tree.branches]
 
-    maxes = np.array([np.max(np.ptp(x, axis=0)) for x in Ms])
-    if np.all(maxes < abs_max):
-        max_crit = True
+    # make numpy arrays and flatten lists
+    probabilities = np.array(probabilities).flatten()
+    possible_pt = np.array(possible_pt).flatten()
+    possible_branches = np.array(possible_branches).flatten()
 
-    if np.min(maxes) / np.max(maxes) > rel_dif:
-        rel_crit = True
-    # print(max_crit, rel_crit)
+    # select according to density and take the selected elements
+    sample = random.choice(np.arange(len(probabilities)), size=N, p=probabilities)
+    sample_time = possible_pt[sample]
+    sample_branches = possible_branches[sample]
 
-    # means = [np.mean(np.ptp(x, axis=0)) for x in Ms]
-    return (max_crit and rel_crit)
-
-
-# probably not a very good idea
-# def transition_adjust(inp_Ma, inp_Mb, transition_length=10):
-#     Ma = copy.deepcopy(inp_Ma)
-#     Mb = copy.deepcopy(inp_Mb)
-#     for i in range(transition_length):
-#         mbw = 0.5 + i / (transition_length*2) # main branch weight
-#         Ma[i] = (Ma[i] * mbw + Mb[i] * (1-mbw))
-#         Mb[i] = (Mb[i] * mbw + Ma[i] * (1-mbw))
-#     return Ma, Mb
+    return _sample_data_at_times(tree, sample_time, alpha=alpha, beta=beta,
+                                branches=sample_branches, scale=scale,
+                                scale_v=scale_v, verbose=verbose)
 
 
-# def smooth_transitions(uMs, branches, tree=None):
-#     for i in range(1, branches):
-#         parallel =
-#         Ms[i] = transition_adjust(Ms[i], Ms[parallel])
+def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
+    """
+    Every possible pseudotime/branch pair on the lineage tree is sampled a
+    number of times.
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+    n_factor: int
+        How many times each pseudotime/branch combination can be present
+    alpha: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    beta: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    scale: True, optional
+        Apply cell-specific library size factor to average gene expression
+    scale_v: float, optional
+        Variance for the drawing of scaling factors (library size) for each cell
+    verbose: bool, optional
+        Print a progress bar or not
+
+    Returns
+    -------
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    sample_pt: ndarray
+        Pseudotime values of the sampled cells
+    branches: ndarray
+        The branch to which each simulated cell belongs
+    scalings: ndarray
+        Library size scaling factor for each cell
+    """
+    pseudotime, branches = cover_whole_tree(tree)
+
+    branches = np.repeat(branches, n_factor)
+    pseudotime = np.repeat(pseudotime, n_factor)
+
+    return _sample_data_at_times(tree, pseudotime, alpha=alpha, beta=beta,
+                                 branches=branches, scale=scale,
+                                 scale_v=scale_v, verbose=verbose)
 
 
-def sample_data_balanced(n_factor, G, tree, sample_times, alpha=0.3, beta=2,
-                         scale_v=0.7, verbose=True, scale=True):
-    if np.shape(alpha) == ():
-        alpha = [alpha] * G
-    if np.shape(beta) == ():
-        beta = [beta] * G
+def cover_whole_tree(tree):
+    """
+    Get all the pseudotime/branch pairs that are possible in the lineage tree.
 
-    # timezone is the part of the tree between two branch points or
-    # a branch point and an endpoint
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+
+    Returns
+    -------
+    pseudotime: ndarray
+        Pseudotime values of all positions in the lineage tree
+    branches: ndarray
+        Branch assignments of all positions in the lineage tree
+    """
     timezone = tree.populate_timezone()
-    branching_times = tree.branch_times()
-    assignments = assign_branches(branching_times, timezone)
-
-    custm = my_negbin()
-
-    stampslist = list()
-    branchlist = list()
+    assignments = sut.assign_branches(tree.branch_times(), timezone)
+    pseudotime = list()
+    branches = list()
 
     for n, a in enumerate(timezone):
         start = a[0]
         end = a[1] + 1
         length = end - start
         for b in assignments[n]:  # for all possible branches in timezone a
-            stampslist.extend(np.arange(start, end))
-            branchlist.extend([b] * length)
+            pseudotime.extend(np.arange(start, end))
+            branches.extend([b] * length)
+    return pseudotime, branches
 
-    N = len(branchlist) * n_factor
-    X = np.zeros((N, G))
-    labels = np.zeros(N)
-    branch = np.zeros(N)
 
-    if scale:
-        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=N))
-    else:
-        scalings = np.ones(N)
+def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
+                          scale=True, scale_v=0.7, verbose=True):
+    """
+    Sample cells from the lineage tree for given pseudotimes. If branch
+    assignments are not specified, cells will be randomly assigned to one of the
+    possible branches.
 
-    branchlist = np.repeat(branchlist, n_factor)
-    stampslist = np.repeat(stampslist, n_factor)
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+    sample_pt: ndarray
+        Pseudotime values for the cells to be sampled
+    branches: ndarray, optional
+        Branch assignment of the cells to be sampled
+    alpha: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    beta: float or ndarray, optional
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    scale: True, optional
+        Apply cell-specific library size factor to average gene expression
+    scale_v: float, optional
+        Variance for the drawing of scaling factors (library size) for each cell
+    verbose: bool, optional
+        Print a progress bar or not
 
-    for n, z in enumerate(zip(stampslist, branchlist)):
-        timestamp, timebranch = z 
-        t = int(timestamp)
-        b = int(timebranch)
-        T_off = branching_times[b][0]
+    Returns
+    -------
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    sample_pt: ndarray
+        Pseudotime values of the sampled cells
+    branches: ndarray
+        The branch to which each simulated cell belongs
+    scalings: ndarray
+        Library size scaling factor for each cell
+    """
+    N = len(sample_pt)
+    if np.shape(alpha) == ():
+        alpha = [alpha] * tree.G
+    if np.shape(beta) == ():
+        beta = [beta] * tree.G
+    if branches is None:
+        branches = sut.pick_branches(tree, sample_pt)
+    scalings = sut.calc_scalings(N, scale, scale_v)
+    expr_matrix = draw_counts(tree, sample_pt, branches, scalings, alpha, beta, verbose)
+    return expr_matrix, sample_pt, branches, scalings
+
+
+def draw_counts(tree, pseudotime, branches, scalings, alpha, beta, verbose):
+    """
+    For all the cells in the lineage tree described by a given pseudotime and
+    branch assignment, sample UMI count values for all genes. Each cell is an
+    expression vector; the combination of all cell vectors builds the expression
+    matrix.
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree
+    pseudotime: ndarray
+        Pseudotime values for all cells to be sampled
+    branches: ndarray
+        Branch assignments for all cells to be sampled
+    scalings: ndarray
+        Library size scaling factor for all cells to be sampled
+    alpha: float or ndarray
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    beta: float or ndarray
+        Parameter for the count-drawing distribution. Float if it is the same
+        for all genes, else an ndarray
+    verbose: bool
+        Print a progress bar or not
+
+    Returns
+    -------
+    expr_matrix: ndarray
+        Expression matrix of the differentiation
+    """
+    N = len(branches)
+    expr_matrix = np.zeros((N, tree.G))
+    custm = cm.my_negbin()
+
+    for n, t, b in zip(np.arange(N), pseudotime, branches):
+        offset = tree.branch_times()[b][0]
         M = tree.means[b]
 
-        for g in range(G):
+        for g in range(tree.G):
             try:
-                mu = M[t - T_off][g] * scalings[n]
+                mu = M[t - offset][g] * scalings[n]
             except IndexError:
-                print("IndexError for g=%d, t=%d, T_off=%d in branch %s" % (g, t, T_off, b))
+                print("IndexError for g=%d, t=%d, offset=%d in branch %s" %
+                      (g, t, offset, b))
                 mu = M[-1][g] * scalings[n]
-            p, r = get_pr_umi(a=alpha[g], b=beta[g], m=mu)
-            X[n][g] = custm.rvs(p, r)
-            labels[n] = t
-            branch[n] = b
+            p, r = cm.get_pr_umi(a=alpha[g], b=beta[g], m=mu)
+            expr_matrix[n][g] = custm.rvs(p, r)
 
         if verbose:
-            printProgress(n, len(branchlist))
-
-    return X, labels, branch, scalings
+            sut.print_progress(n, len(branches))
+    return expr_matrix
