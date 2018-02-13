@@ -1,0 +1,63 @@
+package:
+  name: prosstt
+  version: "1.0"
+
+source:
+  git_url: git@github.com:soedinglab/prosstt.git
+  git_rev: {{ commit_id }}
+
+build:
+  script: pip install
+  number: 0
+  skip: True  #  [not py3k]
+  entry_points:
+    - stammp-bsfinder = stammp.scripts.bsfinder:run
+    - stammp-preprocess = stammp.scripts.preprocess:run
+    - stammp-postprocess = stammp.scripts.postprocess:main
+    - stammp-normalize = stammp.scripts.normalize:run
+#    - stammp-normalizeFake = stammp.scripts.normalizeFake:run
+    - stammp-convert2quantile = stammp.scripts.convert2quantile:run
+#    - stammp-makeCenterBothEnds = stammp.plots.makeCenterBothEnds:run
+    - stammp-makeCenterBothEnds_bs = stammp.plots.makeCenterBothEnds_bs:main
+    - stammp-makeKmerPerPosition = stammp.plots.makeKmerPerPosition:run
+#    - stammp-remove5primeAdapter = stammp.scripts.utils.remove5primeAdapter:run
+    - stammp-removePCRduplicates = stammp.scripts.utils.removePCRduplicates:run
+    - stammp-makeNegSets = stammp.scripts.makeNegSets:run
+    - stammp-xxmotif = stammp.scripts.xxmotif:run
+    - stammp-makeKmerLogOdds = stammp.plots.makeKmerLogOdds:run
+#    - stammp-makeJaccard = stammp.plots.makeJaccard:run
+#    - stammp-getProcessingIndex = stammp.scripts.getProcessingIndex:run
+#    - stammp-getColocalization = stammp.scripts.getColocalization:run
+    - stammp-makeHeatMap = stammp.plots.makeHeatMap:run
+    - stammp-makeHeatMapSmall = stammp.plots.makeHeatMapSmall:run
+    - stammp-makeNucleotideProbabilities = stammp.plots.makeNucleotideProbabilities:run
+    - stammp-adapter-clipper = stammp.scripts.utils.clipper53:main
+#    - stammp-selectSitesInside = stammp.scripts.selectSitesInside:run
+#    - stammp-selectSitesAround = stammp.scripts.selectSitesAround:run
+#    - stammp-generateConfig = stammp.scripts.generate_config:main
+    - stammp-bam-postprocess = stammp.scripts.bam_postprocessing:main
+    - stammp-softclip-analyzer = stammp.scripts.utils.clipped_seq:main
+    - stammp-gffFilterSites = stammp.scripts.filter_sites:main
+    - stammp-annotate-table = stammp.scripts.utils.annotate_table:main
+
+requirements:
+  build:
+    - python
+    - pip
+
+  run:
+    - python
+    - numpy
+    - scipy
+    - pandas
+    - matplotlib
+
+test:
+  imports:
+    - prosstt
+    - prosstt.tree
+
+  # requires:
+  #   - nose
+  # commands:
+  #   - nosetests stammp
