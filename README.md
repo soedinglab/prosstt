@@ -29,3 +29,5 @@ We also recommend the following libraries:
 ### How to use
 
 We provide jupyter notebooks with a [baseline example](https://github.com/soedinglab/prosstt/blob/master/examples/minimal_example.ipynb), a more involved example that explains the choice of [variance parameters](https://github.com/soedinglab/prosstt/blob/master/examples/variance_sim.ipynb), and a notebook that showcases the different [sampling strategies](https://github.com/soedinglab/prosstt/blob/master/examples/density_sampling.ipynb).
+
+Alternatively, we include a python script that can be run on the command line (examples/generate_simN.py) to produce simulations like the ones used in the [MERLoT](https://www.biorxiv.org/content/early/2018/02/08/261768) paper.

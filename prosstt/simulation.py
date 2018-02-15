@@ -150,7 +150,7 @@ def diffusion(steps):
     return W
 
 
-def simulate_coefficients(tree, a=0.05, **kwargs):
+def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
     """
     H encodes how G genes are expressed by defining their membership to K
     expression modules (coded in a matrix W). H could be told to encode
@@ -178,7 +178,7 @@ def simulate_coefficients(tree, a=0.05, **kwargs):
     if "a" not in kwargs.keys():
         warnings.warn(
             "No argument 'a' specified in kwargs: using gamma and a=0.05", UserWarning)
-        return _sim_coeff_gamma(tree, a)
+        return _sim_coeff_gamma(tree, fallback_a)
     # if a, b are present: beta distribution
     if "b" in kwargs.keys():
         groups = sut.create_groups(tree.modules, tree.G)
@@ -529,8 +529,8 @@ def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=
     sample_branches = possible_branches[sample]
 
     return _sample_data_at_times(tree, sample_time, alpha=alpha, beta=beta,
-                                branches=sample_branches, scale=scale,
-                                scale_v=scale_v, verbose=verbose)
+                                 branches=sample_branches, scale=scale,
+                                 scale_v=scale_v, verbose=verbose)
 
 
 def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
@@ -706,7 +706,7 @@ def draw_counts(tree, pseudotime, branches, scalings, alpha, beta, verbose):
                 print("IndexError for g=%d, t=%d, offset=%d in branch %s" %
                       (g, t, offset, b))
                 mu = M[-1][g] * scalings[n]
-            p, r = cm.get_pr_umi(a=alpha[g], b=beta[g], m=mu)
+            p, r = cm.get_pr_umi_atom(a=alpha[g], b=beta[g], m=mu)
             expr_matrix[n][g] = custm.rvs(p, r)
 
         if verbose:

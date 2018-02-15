@@ -11,7 +11,6 @@ import collections
 from collections import defaultdict
 import numbers
 import sys
-import shutil
 
 import numpy as np
 from numpy import random
@@ -68,7 +67,7 @@ def random_partition(k, iterable):
     """
     results = [[] for i in range(k)]
     for value in iterable:
-        x = random.randint(k+1)
+        x = random.randint(k)
         results[x].append(value)
     return results
 
