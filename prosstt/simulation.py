@@ -706,7 +706,7 @@ def draw_counts(tree, pseudotime, branches, scalings, alpha, beta, verbose):
                 print("IndexError for g=%d, t=%d, offset=%d in branch %s" %
                       (g, t, offset, b))
                 mu = M[-1][g] * scalings[n]
-            p, r = cm.get_pr_umi_atom(a=alpha[g], b=beta[g], m=mu)
+            p, r = cm.get_pr_umi(a=alpha[g], b=beta[g], m=mu)
             expr_matrix[n][g] = custm.rvs(p, r)
 
         if verbose:
