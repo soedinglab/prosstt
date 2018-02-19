@@ -43,12 +43,12 @@ def simulate_expression_programs(tree, tol):
     return programs
 
 
-def sim_expr_branch(T, K, cutoff=0.5, max_loops=100):
+def sim_expr_branch(branch_length, expr_progr, cutoff=0.5, max_loops=100):
     """
-    Return K diffusion processes of length T as a matrix W. The output of
+    Return expr_progr diffusion processes of length T as a matrix W. The output of
     sim_expr_branch is complementary to _sim_coeff_beta.
 
-    W encodes how a group of K coexpressed genes will behave through
+    W encodes how a group of expr_progr coexpressed genes will behave through
     differentiation time. This matrix describes one branch of a
     differentiation tree (between two branch points or between a branch point
     and an endpoint). W describes the module in terms of relative expression
@@ -68,9 +68,9 @@ def sim_expr_branch(T, K, cutoff=0.5, max_loops=100):
 
     Parameters
     ----------
-    T: int
-        The length of the branch of the differentiation tree
-    K: int
+    branch_length: int
+        The length of the branch of the differentiation tree in pseudotime units
+    expr_progr: int
         The number of components/modules of coexpression that describe the
         differentiation in this branch of the tree
     cutoff: float, optional
@@ -86,13 +86,13 @@ def sim_expr_branch(T, K, cutoff=0.5, max_loops=100):
     W: ndarray
         Output array
     """
-    W = np.zeros((K, T))
+    programs = np.zeros((expr_progr, branch_length))
     k = 0
     loops = 0
-    while k < K:
-        W[k] = diffusion(T)
+    while k < expr_progr:
+        programs[k] = diffusion(branch_length)
 
-        correlates = sut.test_correlation(W, k, cutoff)
+        correlates = sut.test_correlation(programs, k, cutoff)
         if correlates:
             # repeat and hope it works better this time
             loops += 1
@@ -106,9 +106,9 @@ def sim_expr_branch(T, K, cutoff=0.5, max_loops=100):
             # and came so far
             # but in the end
             # it doesn't even matter
-            return sim_expr_branch(T, K, cutoff=cutoff)
+            return sim_expr_branch(branch_length, expr_progr, cutoff=cutoff)
 
-    return np.transpose(W)
+    return np.transpose(programs)
 
 
 def diffusion(steps):
@@ -123,31 +123,26 @@ def diffusion(steps):
 
     Returns
     -------
-    W: float array
+    walk: float array
         A diffusion process with a specified number of steps.
     """
-    V = np.zeros(steps)
-    W = np.zeros(steps)
+    velocity = np.zeros(steps)
+    walk = np.zeros(steps)
 
-    W[0] = sp.stats.uniform.rvs()
-    V[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
+    walk[0] = sp.stats.uniform.rvs()
+    velocity[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
     s_eps = 1 / steps
     eta = sp.stats.uniform.rvs()
 
     for t in range(0, steps - 1):
-        W[t + 1] = W[t] + V[t]
+        walk[t + 1] = walk[t] + velocity[t]
 
         epsilon = sp.stats.norm.rvs(loc=0, scale=s_eps)
         # amortize the update
-        V[t + 1] = 0.95 * V[t] + epsilon - eta * V[t]
+        velocity[t + 1] = 0.95 * velocity[t] + epsilon - eta * velocity[t]
 
-        # quality control: we are not (?) allowed to go below 0. If it happens,
-        # reverse and dampen velocity
-        # if W[t+1] <= 0:
-        #     W[t+1] = W[t]
-        #     V[t+1] = -0.2 * V[t]
-    return W
+    return walk
 
 
 def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
@@ -238,7 +233,7 @@ def _sim_coeff_gamma(tree, a=0.05):
     return coefficients
 
 
-def simulate_lineage(tree, intra_branch_tol=0.4, inter_branch_tol=0.5, **kwargs):
+def simulate_lineage(tree, intra_branch_tol=0, inter_branch_tol=0.2, **kwargs):
     """
     Simulate gene expression for each point of the lineage tree (each
     possible pseudotime/branch combination). The simulation will try to make
@@ -281,11 +276,16 @@ def simulate_lineage(tree, intra_branch_tol=0.4, inter_branch_tol=0.5, **kwargs)
     programs = simulate_expression_programs(tree, intra_branch_tol)
 
     # check that parallel branches don't overlap too much
-    programs, relative_means = correct_parallel(tree, programs, coefficients, intra_branch_tol, inter_branch_tol)
+    programs, relative_means = correct_parallel(tree, programs, coefficients,
+                                                intra_branch_tol, inter_branch_tol)
 
     # adjust the ends of the relative mean expression matrices
-    for b in tree.topology:
-        relative_means[b[1]] = sut.bifurc_adjust(relative_means[b[1]], relative_means[b[0]])
+    for branch_pair in tree.topology:
+        branch_from = branch_pair[0]
+        branch_to = branch_pair[1]
+        adjust_from = relative_means[branch_to]
+        adjust_to = relative_means[branch_from]
+        relative_means[branch_to] = sut.bifurc_adjust(adjust_from, adjust_to)
 
     return (pd.Series(relative_means),
             pd.Series(programs),
@@ -372,19 +372,15 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
     sample_time = np.arange(0, tree.get_max_time())
     gene_scale = np.exp(sp.stats.norm.rvs(
         loc=gene_loc, scale=gene_s, size=tree.G))
-    Ms = {}
-    while not sut.are_lengths_ok(Ms):
-        uMs, Ws, Hs = simulate_lineage(tree, a=0.05)
-        for i in tree.branches:
-            Ms[i] = np.exp(uMs[i]) * gene_scale
-
-    tree.add_genes(Ms)
+    means = {}
+    tree.default_gene_expression()
     alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
 
     return _sample_data_at_times(tree, sample_time, alpha=alphas, beta=betas)
 
 
-def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
+def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
+                             beta=2, scale=True, scale_v=0.7):
     """
     Simulate the expression matrix of a differentiation if the data came from
     a time series experiment.
@@ -418,8 +414,6 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, b
         Apply cell-specific library size factor to average gene expression
     scale_v: float, optional
         Variance for the drawing of scaling factors (library size) for each cell
-    verbose: bool, optional
-        Print a progress bar or not
 
     Returns
     -------
@@ -432,7 +426,8 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, b
     scalings: ndarray
         Library size scaling factor for each cell
     """
-    series_points, cells, point_std = sut.process_timeseries_input(series_points, cells, point_std)
+    series_points, cells, point_std = sut.process_timeseries_input(
+        series_points, cells, point_std)
     pseudotimes = []
 
     max_time = tree.get_max_time()
@@ -440,7 +435,7 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3, b
         times_around_t = draw_times(t, n, max_time, var)
         pseudotimes.extend(times_around_t)
     return _sample_data_at_times(tree, pseudotimes, alpha=alpha, beta=beta,
-                                 scale=scale, scale_v=scale_v, verbose=verbose)
+                                 scale=scale, scale_v=scale_v)
 
 
 def draw_times(timepoint, no_cells, max_time, var=4):
@@ -477,7 +472,7 @@ def draw_times(timepoint, no_cells, max_time, var=4):
     return sample_pt
 
 
-def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
+def sample_density(tree, no_cells, alpha=0.3, beta=2, scale=True, scale_v=0.7):
     """
     Use cell density along the lineage tree to sample pseudotime/branch pairs
     for the expression matrix.
@@ -486,8 +481,8 @@ def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=
     ----------
     tree: Tree
         A lineage tree
-    N: int
-        Number of cells to sample
+    no_cells: int
+        no_cellsumber of cells to sample
     alpha: float or ndarray, optional
         Parameter for the count-drawing distribution. Float if it is the same
         for all genes, else an ndarray
@@ -498,8 +493,6 @@ def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=
         Apply cell-specific library size factor to average gene expression
     scale_v: float, optional
         Variance for the drawing of scaling factors (library size) for each cell
-    verbose: bool, optional
-        Print a progress bar or not
 
     Returns
     -------
@@ -524,16 +517,17 @@ def sample_density(tree, N, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=
     possible_branches = np.array(possible_branches).flatten()
 
     # select according to density and take the selected elements
-    sample = random.choice(np.arange(len(probabilities)), size=N, p=probabilities)
+    sample = random.choice(np.arange(len(probabilities)),
+                           size=no_cells, p=probabilities)
     sample_time = possible_pt[sample]
     sample_branches = possible_branches[sample]
 
     return _sample_data_at_times(tree, sample_time, alpha=alpha, beta=beta,
                                  branches=sample_branches, scale=scale,
-                                 scale_v=scale_v, verbose=verbose)
+                                 scale_v=scale_v)
 
 
-def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7, verbose=True):
+def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7):
     """
     Every possible pseudotime/branch pair on the lineage tree is sampled a
     number of times.
@@ -554,8 +548,6 @@ def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7
         Apply cell-specific library size factor to average gene expression
     scale_v: float, optional
         Variance for the drawing of scaling factors (library size) for each cell
-    verbose: bool, optional
-        Print a progress bar or not
 
     Returns
     -------
@@ -575,7 +567,7 @@ def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7
 
     return _sample_data_at_times(tree, pseudotime, alpha=alpha, beta=beta,
                                  branches=branches, scale=scale,
-                                 scale_v=scale_v, verbose=verbose)
+                                 scale_v=scale_v)
 
 
 def cover_whole_tree(tree):
@@ -599,18 +591,18 @@ def cover_whole_tree(tree):
     pseudotime = list()
     branches = list()
 
-    for n, a in enumerate(timezone):
-        start = a[0]
-        end = a[1] + 1
+    for i, branch_timezone in enumerate(timezone):
+        start = branch_timezone[0]
+        end = branch_timezone[1] + 1
         length = end - start
-        for b in assignments[n]:  # for all possible branches in timezone a
+        for branch in assignments[i]:  # for all possible branches in timezone a
             pseudotime.extend(np.arange(start, end))
-            branches.extend([b] * length)
+            branches.extend([branch] * length)
     return pseudotime, branches
 
 
 def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
-                          scale=True, scale_v=0.7, verbose=True):
+                          scale=True, scale_v=0.7):
     """
     Sample cells from the lineage tree for given pseudotimes. If branch
     assignments are not specified, cells will be randomly assigned to one of the
@@ -634,8 +626,6 @@ def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
         Apply cell-specific library size factor to average gene expression
     scale_v: float, optional
         Variance for the drawing of scaling factors (library size) for each cell
-    verbose: bool, optional
-        Print a progress bar or not
 
     Returns
     -------
@@ -648,19 +638,19 @@ def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
     scalings: ndarray
         Library size scaling factor for each cell
     """
-    N = len(sample_pt)
+    no_cells = len(sample_pt)
     if np.shape(alpha) == ():
         alpha = [alpha] * tree.G
     if np.shape(beta) == ():
         beta = [beta] * tree.G
     if branches is None:
         branches = sut.pick_branches(tree, sample_pt)
-    scalings = sut.calc_scalings(N, scale, scale_v)
-    expr_matrix = draw_counts(tree, sample_pt, branches, scalings, alpha, beta, verbose)
+    scalings = sut.calc_scalings(no_cells, scale, scale_v)
+    expr_matrix = draw_counts(tree, sample_pt, branches, scalings, alpha, beta)
     return expr_matrix, sample_pt, branches, scalings
 
 
-def draw_counts(tree, pseudotime, branches, scalings, alpha, beta, verbose):
+def draw_counts(tree, pseudotime, branches, scalings, alpha, beta):
     """
     For all the cells in the lineage tree described by a given pseudotime and
     branch assignment, sample UMI count values for all genes. Each cell is an
@@ -683,32 +673,30 @@ def draw_counts(tree, pseudotime, branches, scalings, alpha, beta, verbose):
     beta: float or ndarray
         Parameter for the count-drawing distribution. Float if it is the same
         for all genes, else an ndarray
-    verbose: bool
-        Print a progress bar or not
 
     Returns
     -------
     expr_matrix: ndarray
         Expression matrix of the differentiation
     """
-    N = len(branches)
-    expr_matrix = np.zeros((N, tree.G))
-    custm = cm.my_negbin()
+    no_cells = len(branches)
 
-    for n, t, b in zip(np.arange(N), pseudotime, branches):
-        offset = tree.branch_times()[b][0]
-        M = tree.means[b]
+    cell_avg_exp = np.zeros((no_cells, tree.G))
+    offsets = [tree.branch_times()[branch][0] for branch in branches]
+    cell_times = pseudotime - offsets
+    p_total = np.zeros(no_cells * tree.G)
+    r_total = np.zeros(no_cells * tree.G)
 
-        for g in range(tree.G):
-            try:
-                mu = M[t - offset][g] * scalings[n]
-            except IndexError:
-                print("IndexError for g=%d, t=%d, offset=%d in branch %s" %
-                      (g, t, offset, b))
-                mu = M[-1][g] * scalings[n]
-            p, r = cm.get_pr_umi_atom(a=alpha[g], b=beta[g], m=mu)
-            expr_matrix[n][g] = custm.rvs(p, r)
+    for n, time, branch in zip(np.arange(no_cells), cell_times, branches):
+        cell_avg_exp[n] = tree.means[branch][time] * scalings[n]
 
-        if verbose:
-            sut.print_progress(n, len(branches))
-    return expr_matrix
+    for cell in range(no_cells):
+        p, r = cm.get_pr_umi(a=alpha, b=beta, m=cell_avg_exp[cell])
+        p_total[cell * tree.G:(cell + 1) * tree.G] = p
+        r_total[cell * tree.G:(cell + 1) * tree.G] = r
+
+    nbinom = sp.stats.nbinom(n=r_total, p=(1 - p_total))
+    expr_matrix = nbinom.rvs()
+    # custm = cm.my_negbin()
+    # expr_matrix = custm.rvs(p_total, r_total)
+    return expr_matrix.reshape((no_cells, tree.G))

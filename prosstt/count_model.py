@@ -154,8 +154,43 @@ def get_pr_umi(a, b, m):
         The number of "failures" of the Bernoulli test.
     """
     s2 = (a * m**2 + b * m)
-    p = (s2 - m) / s2 if s2 > 0 else 0
+    p = (s2 - m) / s2# if s2 > 0 else 0
+    r = (m**2) / (s2 - m)# if s2 > 0 else 0
+    p[s2<=0] = 0
+    r[s2 <= 0] = 0
+    return p, r
+
+
+def get_pr_umi_atom(a, b, m):
+    """
+    Calculate parameters for my_negbin from the mean and variance of the
+    distribution.
+
+    For single cell RNA sequencing data we assume that the distribution of the
+    transcripts is described by a negative binomial where the variance s^2
+    depends on the mean mu by a relation s^2 = a*mu^2 + b*mu.
+
+    Parameters
+    ----------
+    a: float
+        Coefficient for the quardratic term. Dominates for high mean expression.
+    b: float
+        Coefficient for the linear term. Dominates for low mean expression.
+    m: float
+        Mean expression of a gene.
+
+    Returns
+    -------
+    p: float
+        The probability of success of the Bernoulli test.
+    r: float
+        The number of "failures" of the Bernoulli test.
+    """
+    s2 = (a * m**2 + b * m)
+    p = (s2 - m) / s2  if s2 > 0 else 0
     r = (m**2) / (s2 - m) if s2 > 0 else 0
+    # p[s2 <= 0] = 0
+    # r[s2 <= 0] = 0
     return p, r
 
 

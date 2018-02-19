@@ -363,45 +363,69 @@ def pick_branch(pseudotime, timezones, assignments):
         print(assignments)
 
 
-def are_lengths_ok(average_expression, abs_max=800, rel_dif=0.3):
+def max_relat_exp(tree, relative_means):
     """
-    Performs a quality check for the matrix of average gene expressions for all
-    branches.
-
-    Specifically, it is required that no gene has a mean expression value above
-    a cutoff, and that no branch has a maximum average expression that is a
-    (specified) order of magnitude above the other branches.
+    Finds maximum relative gene expression for each gene along the lineage tree.
 
     Parameters
     ----------
-    average_expression: Series
-        The average expression of each gene over pseudotime for each branch
-    abs_max: Numbers.number, optional
-        Maximum average expression allowed for a gene
-    rel_dif: float, optional
-        Maximum value of the ratio between the smallest and greatest maximum
-        average gene expression value of all genes in all branches.
+    tree: Tree object
+        The lineage tree in question
+    relative_means: Series
+        Relative mean expression for all genes on every lineage tree branch
 
     Returns
     -------
-    (): bool
-        Whether both conditions are fulfilled
+    maxes: ndarray
+        An array with the maximum relative expression of each gene along the
+        lineage tree
     """
-    # worked out kinda ok
-    if not average_expression:
-        return False
+    maxes = np.zeros((tree.G, len(tree.branches)))
+    for i, branch in enumerate(tree.branches):
+        maxes[:, i] = np.max(relative_means[branch], axis=0)
+    return maxes
 
-    max_crit = False
-    rel_crit = False
 
-    maxes = np.array([np.max(np.ptp(x, axis=0)) for x in average_expression.values()])
-    if np.all(maxes < abs_max):
-        max_crit = True
+def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, gene_std=1):
+    """
+    Samples appropriate base expression values for each gene. The criterion
+    applied is that the absolute average gene expression does not surpass a
+    certain threshold.
 
-    if np.min(maxes) / np.max(maxes) > rel_dif:
-        rel_crit = True
+    Parameters
+    ----------
+    tree: Tree object
+        The lineage tree
+    relative_means: Series
+        Relative mean expression for all genes on every lineage tree branch
+    abs_max: int, optional
+        Highest allowed value for the absolute average expression of a gene
+        along the lineage tree
+    gene_mean: float, optional
+        Average of the log-normal distribution from which the base gene
+        expression values are sampled
+    gene_std: float, optional
+        Standard deviation of the log-normal distribution from which the base
+        gene expression values are sampled
 
-    return max_crit and rel_crit
+    Returns
+    -------
+    base_gene_exp: ndarray
+        An array that contains base expression values for each gene
+    """
+    base_gene_exp = np.zeros(tree.G)
+
+    log_generator = sp.stats.norm(loc=gene_mean, scale=gene_std)
+
+    max_gene_per_branch = max_relat_exp(tree, relative_means)
+    max_per_gene = np.max(max_gene_per_branch, axis=1)
+
+    for gene in range(tree.G):
+        tmp = np.exp(log_generator.rvs())
+        while tmp * max_per_gene[gene] > abs_max:
+            tmp = np.exp(log_generator.rvs())
+        base_gene_exp[gene] = tmp
+    return base_gene_exp
 
 
 def calc_scalings(cells, scale=True, scale_v=0.7):

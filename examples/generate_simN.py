@@ -116,14 +116,11 @@ def main(job_id, save_dir, num_brpoints, plot):
                   modules=br_compl, G=G)
 
     Ms = {}
-    # j = 0
-    while not sut.are_lengths_ok(Ms):
-        # j += 1
-        # print("attempt no", j)
-        gene_scale = np.exp(sp.stats.norm.rvs(loc=0.7, scale=1, size=G))
-        uMs, Ws, H = sim.simulate_lineage(t, a=0.05)
-        for i in t.branches:
-            Ms[i] = np.exp(uMs[i]) * gene_scale
+    uMs, Ws, H = sim.simulate_lineage(t, a=0.05, intra_branch_tol=0)
+    gene_scale = sut.simulate_base_gene_exp(t, uMs)
+    Ms = {}
+    for branch in t.branches:
+        Ms[branch] = np.exp(uMs[branch]) * gene_scale
     t.add_genes(Ms)
 
     X, pseudotime, brns, scalings = sim.sample_density(t, t.get_max_time(),
