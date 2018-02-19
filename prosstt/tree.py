@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import newick
 from prosstt import tree_utils as tu
+from prosstt import simulation as sim
+from prosstt import sim_utils as sut
 
 class Tree(object):
     'topology of the differentiation tree'
@@ -112,16 +114,50 @@ class Tree(object):
             density[k] = np.array([1. / total_time] * np.int(self.time[k]))
         return density
 
-    def add_genes(self, average_expression):
+
+    def add_genes(self, *args):
+        """
+        Sets the average gene expression trajectories of genes for all branches
+        after performing a sanity check. Calls either _add_genes_from_relative
+        or _add_genes_from_average.
+        """
+        if len(args) == 1 and isinstance(args[0], dict):
+            self._add_genes_from_average(args[0])
+        if len(args) == 2 and isinstance(args[1], np.ndarray):
+            self._add_genes_from_relative(args[0], args[1])
+
+
+    def _add_genes_from_relative(self, relative_means, base_gene_expr):
         """
         Sets the average gene expression trajectories of genes for all branches
         after performing a sanity check.
 
         Parameters
         ----------
-        average_expression: float array
-            A list of arrays. List length is #branches and array
-            average_expression[b] has the dimensions time[b], G.
+        relative_means: dict
+            A dictionary of tables that contain relative gene expression for
+            each pseudotime point of every branch (ndarray
+            relative_expression[b] has the dimensions time[b], G)
+        base_gene_expr: ndarray
+            Contains the base gene expression values for each gene.
+        """
+        average_expr = {}
+        for i in self.branches:
+            average_expr[i] = np.exp(relative_means[i]) * base_gene_expr
+        self._add_genes_from_average(average_expr)
+
+
+    def _add_genes_from_average(self, average_expression):
+        """
+        Sets the average gene expression trajectories of genes for all branches
+        after performing a sanity check.
+
+        Parameters
+        ----------
+        average_expression: dict
+            A dictionary of tables that contain average gene expression for
+            each pseudotime point of every branch (ndarray
+            average_expression[b] has the dimensions time[b], G)
         """
         # sanity check of dimensions so that in case a user messes up there is
         # no cryptic IndexOutOfBounds exception they have to trace.
@@ -197,7 +233,7 @@ class Tree(object):
         treedict = defaultdict(list)
         for branch_pair in self.topology:
             treedict[branch_pair[0]].append(branch_pair[1])
-        return(treedict)
+        return treedict
 
     def paths(self, start):
         """
@@ -332,3 +368,15 @@ class Tree(object):
             matches = top_array[:, 0] == branch
             parallel[branch] = top_array[matches, 1]
         return parallel
+
+    def default_gene_expression(self):
+        """
+        Wrapper that simulates average gene expression values along the lineage
+        tree by calling appropriate functions with default parameters.
+        """
+        relative_expr, walks, coefficients = sim.simulate_lineage(self, a=0.05)
+        gene_scale = sut.simulate_base_gene_exp(self, relative_expr)
+        average_expr = {}
+        for branch in self.branches:
+            average_expr[branch] = np.exp(relative_expr[branch]) * gene_scale
+        self.add_genes(average_expr)
