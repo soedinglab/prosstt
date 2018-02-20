@@ -7,7 +7,7 @@ package:
 source:
   fn: prosstt-{{ version }}.tar.gz
   url: https://github.com/soedinglab/prosstt/archive/v{{ version }}.tar.gz
-  sha256: ecaa306f4590242fc2985340bf51f649a5e173c091f1bef32c1e15595dfb6eee
+  sha256: f3c1227e0e01147d65f4cb6a12c35a6e99873d0908762a49c16886100e7e1c90
 
 build:
   number: 0
