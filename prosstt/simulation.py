@@ -512,9 +512,9 @@ def sample_density(tree, no_cells, alpha=0.3, beta=2, scale=True, scale_v=0.7):
     probabilities = [tree.density[b] for b in tree.branches]
 
     # make numpy arrays and flatten lists
-    probabilities = np.array(probabilities).flatten()
-    possible_pt = np.array(possible_pt).flatten()
-    possible_branches = np.array(possible_branches).flatten()
+    probabilities = np.concatenate(probabilities)
+    possible_pt = np.concatenate(possible_pt)
+    possible_branches = np.concatenate(possible_branches)
 
     # select according to density and take the selected elements
     sample = random.choice(np.arange(len(probabilities)),

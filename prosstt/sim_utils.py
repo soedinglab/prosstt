@@ -161,8 +161,9 @@ def pearson_between_programs(genes, prog1, prog2):
         The pearson correlation coefficient for all genes in the two programs
     """
     pearson = np.zeros(genes)
+    common = min(prog1.shape[0], prog2.shape[0])
     for gene in range(genes):
-        pearson[gene] = sp.stats.pearsonr(prog1[:, gene], prog2[:, gene])[0]
+        pearson[gene] = sp.stats.pearsonr(prog1[:common, gene], prog2[:common, gene])[0]
     return pearson
 
 
