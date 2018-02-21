@@ -17,7 +17,32 @@ from prosstt import simulation as sim
 from prosstt import sim_utils as sut
 
 class Tree(object):
-    'topology of the differentiation tree'
+    """
+    Formalization of a lineage tree.
+
+    Attributes
+    ----------
+    topology: list of lists
+        Each nested list contains a connection from one branch to another
+    time: dict
+        The length of each branch in pseudotime units
+    num_branches: int
+        Total number of branches
+    branch_points: int
+        Total number of branch points
+    modules: int
+        Total number of expression programs for the lineage tree
+    G: int
+        Total number of genes
+    means: Series
+        Average gene expression per gene per branch
+    branches: list
+        List of the branch names
+    root: str
+        Name of the branch that contains the tree root
+    density: Series
+        Density of cells at each part of the lineage tree
+    """
 
     # default values for when the user is not decided
     def_time = 40

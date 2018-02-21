@@ -25,6 +25,7 @@ requirements:
     - pandas
     - matplotlib
     - jupyter
+    - newick
     - scanpy
 
 test:

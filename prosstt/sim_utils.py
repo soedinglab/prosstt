@@ -247,21 +247,24 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
 
 def assign_branches(branch_times, timezone):
     """
-    Assigns a branch to every timezone.
+    Assigns a branch to every timezone::
 
-            -- T[1]------
-    -T[0]--|          -- T[3]------
-            -- T[2]--|
-                      -- T[4]-
-    timezones:
-    ---0---|----1----|-2-|-3--|-4--
+                -- T[1]------
+        -T[0]--|          -- T[3]------
+                -- T[2]--|
+                          -- T[4]-
+        timezones:
+        ---0---|----1----|-2-|-3--|-4--
 
-    tz   br
-    0    0
-    1    1,2
-    2    1,3,4
-    3    3,4
-    4    3
+    ========  ========
+    timezone  branch
+    ========  ========
+    0         0
+    1         1,2
+    2         1,3,4
+    3         3,4
+    4         3
+    ========  ========
 
     A time point in timezone i can belong to one of k possible branches
 
