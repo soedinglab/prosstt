@@ -1,4 +1,5 @@
 library(viridis)
+library(rgl)
 library(RColorBrewer)
 library(destiny)
 
@@ -26,12 +27,12 @@ guoft <- read.table("../data/guo/GuoFeatures.txt")
 
 data = guo
 stage = as.factor(guoft$V4)
-dm <- DiffusionMap(data, sigma = "global")
+dm <- DiffusionMap(data, sigma = "local")
 d = 3
 trcoords <- sweep(eigenvectors(dm)[,1:d], eigenvalues(dm)[1:d], MARGIN=2, `*`)
 plot(trcoords[,1:2])
 
-rot <- rotation_matrix(comp1 = 1, comp2 = 3, angle = -30)
+rot <- rotation_matrix(comp1 = 1, comp2 = 3, angle = 30)
 # an angle of +30 or -30 might be needed depending on the 
 coords = trcoords[,1:3]
 tcoords = coords %*% rot
@@ -50,16 +51,18 @@ points(toplot[,1], toplot[,2], pch=16, col=colorcells,
      xlab="DC2", ylab="transformed DC1", cex=1.5, cex.lab=1.5, cex.axis=1.5)
 legend("right", legend=paste(levels(stage), "C", sep=""), pt.bg = pal_labels, pch=21, title="Stage",
        xpd=TRUE, inset=c(-0.25,0), bty="n", cex=1.5)
-dev.off()
-
+# dev.off()
 
 ##########################
 # paul plot
 ##########################
-data <- read.table(file="~/Documents/repos/merlot/inst/example/Paul2015.txt",
+data <- read.table(file="../data/paul/Paul2015.txt",
                    sep="\t", header = T, stringsAsFactors = F, check.names = F, row.names = 1)
-annotation <- read.csv("~/Documents/data/paul/PaulCellsMapping.csv", header = F)
-ddata <- data
+annotation <- read.csv("../data/paul/PaulCellsMapping.csv", header = F)
+data <- as.matrix(data)
+sum1 <- apply(data, 1, sum)
+scalings <- sum1/mean(sum1)
+ddata <- 1/scalings * data
 
 # # three coloring schemes
 # # one: according to clusters
@@ -101,18 +104,17 @@ colorcells[cmp] <- prog_cols[1]
 colorcells[gmp] <- prog_cols[2]
 colorcells[mep] <- prog_cols[3]
 
-
-
-dif <- DiffusionMap(ddata)
+subsample = sample(1:2730, 500)
+dif <- DiffusionMap(ddata[subsample,], k=20)
 trcoords <- sweep(eigenvectors(dif)[,1:20], eigenvalues(dif)[1:20], MARGIN=2, `*`)
-plot(trcoords[,1:2])
+plot3d(trcoords[,1:3])
 
 svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/paul.svg", height=4.8, width=6)
 par(mar=c(4.1, 5.1, 2.1, 5.1))
 
-plot(trcoords[,1], trcoords[,2], pch=16, col="black",
+plot(trcoords[,1], trcoords[,3], pch=16, col="black",
      xlab="DC2", ylab="transformed DC1", cex=1.5, cex.lab=1.5, cex.axis=1.5)
-points(trcoords[,1], trcoords[,2], pch=16, col=colorcells,
+points(trcoords[,1], trcoords[,3], pch=16, col=colorcells,
       xlab="DC2", ylab="transformed DC1", cex=1., cex.lab=1.5, cex.axis=1.5)
 legend("right", legend=labels, pt.bg=prog_cols, pch=21, title="Group", cex=1.5,
        xpd=TRUE, inset=c(-0.25,0), bty="n")
@@ -125,12 +127,14 @@ dev.off()
 raw = read.delim("~/Documents/repos/hhtree/ProcessedDatasets/TreutleinDescription.txt", stringsAsFactors=FALSE, header = T)
 labels = read.table(file="~/Documents/repos/hhtree/data/BarbraCellTimes.txt", sep="", header=T, stringsAsFactors = F)
 tp = as.factor(labels$assignment)
-
-dm <- DiffusionMap(raw, density.norm = T, verbose = T, sigma = "local")
+data <- as.matrix(raw)
+library_size = apply(data, 1, sum)
+data <- 1/library_size * data
+dm <- DiffusionMap(data)
 
 toplot = eigenvectors(dm)
-svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/treutlein.svg", height=4.8, width=6)
-par(mar=c(4.1, 5.1, 2.1, 5.1))
+# svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/treutlein.svg", height=4.8, width=6)
+# par(mar=c(4.1, 5.1, 2.1, 5.1))
 pal_labels = brewer.pal(length(unique(tp)), "Set2")
 colorcells = pal_labels[tp]
 plot(toplot[,1], toplot[,2], pch=16, col="black",
@@ -145,10 +149,11 @@ dev.off()
 
 
 
+
 ##########################
 # sim single bif plot
 ##########################
-JobFolder <- "~/Documents/repos/prosstt/data/single/"
+JobFolder <- "../data/single/"
 JobName <- "single_"
 job <- paste(JobFolder, JobName, sep="")
 raw <- read.table(file=paste(job, "simulation.txt", sep=""), sep="\t", header=T, row.names=1)
@@ -174,27 +179,26 @@ toplot <- cbind(dif@eigenvectors[,2], tcoords[,1], dif@eigenvectors[,3])
 plot(toplot[,1], toplot[,2], pch=16, col=labels,
      xlab="DC2", ylab="transformed DC1", cex=1, cex.lab=1.5, cex.axis=1.5)
 
-
 CellCoordinates <- toplot[,1:2]
 
 pal_labels <- brewer.pal(length(unique(labels)), "Set2")
 colorcells=pal_labels[labels]
 
-svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/single_bif.svg", height=4.8, width=6)
-par(mar=c(4.1, 5.1, 2.1, 5.1))
+# svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/single_bif.svg", height=4.8, width=6)
+# par(mar=c(4.1, 5.1, 2.1, 5.1))
 plot(CellCoordinates[,1], CellCoordinates[,2], pch=16, col="black",
      xlab="DC1", ylab="DC2", cex=2, cex.lab=1.5, cex.axis=1.5)
 points(CellCoordinates[,1], CellCoordinates[,2], pch=16, col=colorcells,
        xlab="DC1", ylab="DC2", cex=1.5, cex.lab=1.5, cex.axis=1.5)
-legend("right", legend=levels(ds$branch), pt.bg=pal_labels, pch=21, title="Branch",
+legend("right", legend=levels(as.factor(labels)), pt.bg=pal_labels, pch=21, title="Branch",
        xpd=TRUE, inset=c(-0.25,0), bty="n", cex=1.5)
-dev.off()
+# dev.off()
 
 
 ##########################
 # sim double bif plot
 ##########################
-JobFolder <- "~/Documents/repos/prosstt/data/double/"
+JobFolder <- "../data/double/"
 JobName <- "double_"
 job <- paste(JobFolder, JobName, sep="")
 raw <- read.table(file=paste(job, "simulation.txt", sep=""), sep="\t", header=T, row.names=1)
@@ -206,19 +210,19 @@ labels <- read.table(paste(job, "cellparams.txt", sep=""))$branches + 1
 
 # calculate diffusion map ----
 dif <- DiffusionMap(data)
-plot3d(eigenvectors(dif)[,1:3], pch=16, col=labels, main=test, size=7)
+plot3d(eigenvectors(dif)[,c(1,2,4)], pch=16, col=labels, size=7)
 
 ds <- data.frame(DC1=eigenvectors(dif)[,1], DC2=eigenvectors(dif)[,2], DC3=eigenvectors(dif)[,3],
                  DC4=eigenvectors(dif)[,4], branch=labels)
 
-t1 <- 10
+t1 <- 20
 t2 <- 0
-t3 <- 100
+t3 <- 40
 rotx = rotation_matrix(1, 2, t1)
 roty = rotation_matrix(1, 3, t2)
 rotz = rotation_matrix(2, 3, t3)
 rot <- rotx %*% roty %*% rotz
-coords = dif@eigenvectors[,1:3]
+coords = dif@eigenvectors[,c(1,2,4)]
 tcoords = coords %*% rot
 toplot <- cbind(tcoords[,1], tcoords[,2])
 plot(toplot, col=labels, pch=16, cex=2)
@@ -229,8 +233,8 @@ CellCoordinates <- toplot
 pal_labels <- brewer.pal(length(unique(labels)), "Set2")
 colorcells=pal_labels[labels]
 
-svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/double_bif.svg", height=4.8, width=6)
-par(mar=c(4.1, 5.1, 2.1, 5.1))
+#svg(filename="~/Documents/presentations/2017-04_PROSSTT_paper/pics/double_bif.svg", height=4.8, width=6)
+#par(mar=c(4.1, 5.1, 2.1, 5.1))
 plot(CellCoordinates[,1], CellCoordinates[,2], pch=16, col="black",
      xlab="DC1", ylab="DC2", cex=2, cex.lab=1.5, cex.axis=1.5)
 points(CellCoordinates[,1], CellCoordinates[,2], pch=16, col=colorcells,

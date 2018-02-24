@@ -43,7 +43,7 @@ def simulate_expression_programs(tree, tol):
     return programs
 
 
-def sim_expr_branch(branch_length, expr_progr, cutoff=0.5, max_loops=100):
+def sim_expr_branch(branch_length, expr_progr, cutoff=0.2, max_loops=100):
     """
     Return expr_progr diffusion processes of length T as a matrix W. The output of
     sim_expr_branch is complementary to _sim_coeff_beta.
@@ -233,7 +233,7 @@ def _sim_coeff_gamma(tree, a=0.05):
     return coefficients
 
 
-def simulate_lineage(tree, intra_branch_tol=0, inter_branch_tol=0.2, **kwargs):
+def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
     """
     Simulate gene expression for each point of the lineage tree (each
     possible pseudotime/branch combination). The simulation will try to make
