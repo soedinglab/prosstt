@@ -386,11 +386,11 @@ def max_relat_exp(tree, relative_means):
     """
     maxes = np.zeros((tree.G, len(tree.branches)))
     for i, branch in enumerate(tree.branches):
-        maxes[:, i] = np.max(relative_means[branch], axis=0)
+        maxes[:, i] = np.max(np.exp(relative_means[branch]), axis=0)
     return maxes
 
 
-def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, gene_std=1):
+def simulate_base_gene_exp(tree, relative_means, abs_max=5000, gene_mean=0.8, gene_std=1):
     """
     Samples appropriate base expression values for each gene. The criterion
     applied is that the absolute average gene expression does not surpass a

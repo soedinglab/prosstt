@@ -145,7 +145,7 @@ def diffusion(steps):
     return walk
 
 
-def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
+def simulate_coefficients(tree, fallback_a=0.04, **kwargs):
     """
     H encodes how G genes are expressed by defining their membership to K
     expression modules (coded in a matrix W). H could be told to encode
@@ -172,7 +172,7 @@ def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
     """
     if "a" not in kwargs.keys():
         warnings.warn(
-            "No argument 'a' specified in kwargs: using gamma and a=0.05", UserWarning)
+            "No argument 'a' specified in kwargs: using gamma and a=0.04", UserWarning)
         return _sim_coeff_gamma(tree, fallback_a)
     # if a, b are present: beta distribution
     if "b" in kwargs.keys():
@@ -272,8 +272,7 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
               tree.num_branches)
         sys.exit(1)
 
-    coefficients = simulate_coefficients(tree, **kwargs)
-    programs = simulate_expression_programs(tree, intra_branch_tol)
+    programs, coefficients = correct_coefficients(tree, tol=intra_branch_tol, **kwargs)
 
     # check that parallel branches don't overlap too much
     programs, relative_means = correct_parallel(tree, programs, coefficients,
@@ -290,6 +289,27 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
     return (pd.Series(relative_means),
             pd.Series(programs),
             coefficients)
+
+
+def correct_coefficients(tree, gene_cutoff=9, tol=0.2, **kwargs):
+    """
+    Check if a gene wants to change its expression too much (log(gene) > threshold).
+
+    Parameters
+    ----------
+
+    """
+    coefficients = simulate_coefficients(tree, **kwargs)
+    programs = simulate_expression_programs(tree, tol)
+    relative_means = sut.calc_relat_means(tree, programs, coefficients)
+
+    for branch in tree.branches:
+        above_cut = np.where(relative_means[branch] > gene_cutoff)
+        offending_genes = np.unique(above_cut[1])
+        local_H = simulate_coefficients(tree, **kwargs)
+        coefficients[:, offending_genes] = local_H[:, offending_genes]
+
+    return programs, coefficients
 
 
 def correct_parallel(tree, programs, coefficients, intra_branch_tol=0.2, inter_branch_tol=0.5):

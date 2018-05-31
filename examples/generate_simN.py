@@ -52,12 +52,7 @@ def save_files(job_id, save_dir, X, labs, brns, scalings, uMs, H, gene_scale, al
     np.savetxt(fname=save_dir + "/" + job_id + "_h.txt", X=H)
 
     for branch in uMs.keys():
-        np.savetxt(fname=save_dir +
-                         "/" +
-                         job_id +
-                         "_ums" +
-                         str(branch) +
-                         ".txt",
+        np.savetxt(fname=save_dir + "/" + job_id + "_ums" + str(branch) + ".txt",
                    X=uMs[branch])
 
 
