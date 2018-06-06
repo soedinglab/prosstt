@@ -426,7 +426,9 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=5000, gene_mean=0.8, ge
 
     for gene in range(tree.G):
         tmp = np.exp(log_generator.rvs())
-        while tmp * max_per_gene[gene] > abs_max:
+        counter = 0
+        while tmp * max_per_gene[gene] > abs_max and counter < 1000:
+            counter = counter + 1
             tmp = np.exp(log_generator.rvs())
         base_gene_exp[gene] = tmp
     return base_gene_exp
