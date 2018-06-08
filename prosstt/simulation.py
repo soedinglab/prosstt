@@ -129,10 +129,11 @@ def diffusion(steps):
     velocity = np.zeros(steps)
     walk = np.zeros(steps)
 
-    walk[0] = sp.stats.uniform.rvs()
+    # walk[0] = sp.stats.uniform.rvs()
+    walk[0] = 0
     velocity[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
-    s_eps = 1 / steps
+    s_eps = 2 / steps
     eta = sp.stats.uniform.rvs()
 
     for t in range(0, steps - 1):
@@ -272,7 +273,9 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
               tree.num_branches)
         sys.exit(1)
 
-    programs, coefficients = correct_coefficients(tree, tol=intra_branch_tol, **kwargs)
+    # programs, coefficients = correct_coefficients(tree, tol=intra_branch_tol, **kwargs)
+    coefficients = simulate_coefficients(tree, **kwargs)
+    programs = simulate_expression_programs(tree, intra_branch_tol)
 
     # check that parallel branches don't overlap too much
     programs, relative_means = correct_parallel(tree, programs, coefficients,
@@ -390,9 +393,6 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
         Library size scaling factor for each cell
     """
     sample_time = np.arange(0, tree.get_max_time())
-    gene_scale = np.exp(sp.stats.norm.rvs(
-        loc=gene_loc, scale=gene_s, size=tree.G))
-    means = {}
     tree.default_gene_expression()
     alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
 

@@ -65,7 +65,7 @@ class Tree(object):
         self.branches = list(time.keys())
 
         if modules is None:
-            self.modules = 3 * branch_points + np.random.randint(1, 20)
+            self.modules = 5 * branch_points + np.random.randint(1, 20)
         else:
             self.modules = modules
 
