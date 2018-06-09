@@ -18,6 +18,14 @@ from prosstt import sim_utils as sut
 from prosstt import count_model as cm
 
 
+def simulate_branch(tree, relative_means, coefficients, branch, tol):
+    topology = np.array(tree.topology)
+    program = sim_expr_branch(tree.time[branch], tree.modules, cutoff=tol)
+    relative_means[branch] = np.dot(program, coefficients)
+    relative_means[branch] = sut.adjust_to_parent(relative_means, branch, topology)
+    return program, relative_means
+
+
 def simulate_expression_programs(tree, tol):
     """
     Simulate the relative expression of the lineage tree expression programs
@@ -234,7 +242,8 @@ def _sim_coeff_gamma(tree, a=0.05):
     return coefficients
 
 
-def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
+def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
+                     inter_branch_tol=0, **kwargs):
     """
     Simulate gene expression for each point of the lineage tree (each
     possible pseudotime/branch combination). The simulation will try to make
@@ -246,6 +255,9 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
     ----------
     tree: Tree
         A lineage tree
+    rel_exp_cutoff: float, optional
+        The log threshold for the maximum average expression before scaling.
+        Recommended values are below 9 (exp(9) is about 8100).
     intra_branch_tol: float, optional
         The threshold for correlation between expression programs in the same
         branch
@@ -259,7 +271,7 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
 
     Returns
     -------
-    relative_means: Series
+    rel_means: Series
         Relative mean expression for all genes on every lineage tree branch
     programs: Series
         Relative expression for all expression programs on every branch of the
@@ -273,95 +285,29 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
               tree.num_branches)
         sys.exit(1)
 
-    # programs, coefficients = correct_coefficients(tree, tol=intra_branch_tol, **kwargs)
     coefficients = simulate_coefficients(tree, **kwargs)
-    programs = simulate_expression_programs(tree, intra_branch_tol)
+    bfs = sut.breadth_first_branches(tree)
+    programs = {}
+    rel_means = {}
 
-    # check that parallel branches don't overlap too much
-    programs, relative_means = correct_parallel(tree, programs, coefficients,
-                                                intra_branch_tol, inter_branch_tol)
+    for branch in bfs:
+        programs[branch], rel_means = simulate_branch(tree, rel_means,
+                                                      coefficients, branch,
+                                                      intra_branch_tol)
+        above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
+        parallels = sut.find_parallel(tree, programs, branch)
+        diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
+        while above_cutoff or not all(diverges):
+            programs[branch], rel_means = simulate_branch(tree, rel_means,
+                                                          coefficients, branch,
+                                                          intra_branch_tol)
+            above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
+            parallels = sut.find_parallel(tree, programs, branch)
+            diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
 
-    # adjust the ends of the relative mean expression matrices
-    for branch_pair in tree.topology:
-        branch_from = branch_pair[0]
-        branch_to = branch_pair[1]
-        adjust_from = relative_means[branch_to]
-        adjust_to = relative_means[branch_from]
-        relative_means[branch_to] = sut.bifurc_adjust(adjust_from, adjust_to)
-
-    return (pd.Series(relative_means),
+    return (pd.Series(rel_means),
             pd.Series(programs),
             coefficients)
-
-
-def correct_coefficients(tree, gene_cutoff=9, tol=0.2, **kwargs):
-    """
-    Check if a gene wants to change its expression too much (log(gene) > threshold).
-
-    Parameters
-    ----------
-
-    """
-    coefficients = simulate_coefficients(tree, **kwargs)
-    programs = simulate_expression_programs(tree, tol)
-    relative_means = sut.calc_relat_means(tree, programs, coefficients)
-
-    for branch in tree.branches:
-        above_cut = np.where(relative_means[branch] > gene_cutoff)
-        offending_genes = np.unique(above_cut[1])
-        local_H = simulate_coefficients(tree, **kwargs)
-        coefficients[:, offending_genes] = local_H[:, offending_genes]
-
-    return programs, coefficients
-
-
-def correct_parallel(tree, programs, coefficients, intra_branch_tol=0.2, inter_branch_tol=0.5):
-    """
-    Check if parallel branches diverge and if not re-draw the expression
-    programs for these branches.
-
-    Parameters
-    ----------
-    tree: Tree
-        A lineage tree
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    coefficients: ndarray
-        A sparse matrix of the contribution of K expression programs to G genes
-    intra_branch_tol: float, optional
-        The threshold for correlation between expression programs in the same
-        branch
-    inter_branch_tol: float, optional
-        The threshold for anticorrelation between relative gene expression in
-        parallel branches
-
-    Returns
-    -------
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    relative_means: dict
-        Relative gene expression for each tree branch
-    """
-    # calculate relative means over tree
-    relative_means = sut.calc_relat_means(tree, programs, coefficients)
-    # find parallel branches
-    parallel = tree.get_parallel_branches()
-    # for all parallel branches check if they are diverging.
-    # if not, fix.
-    for key in parallel:
-        diverges = sut.diverging_parallel(parallel[key], relative_means,
-                                          tree.G, tol=inter_branch_tol)
-        while not all(diverges):
-            for branch in parallel[key]:
-                programs[branch] = sim_expr_branch(tree.time[branch],
-                                                   tree.modules,
-                                                   cutoff=intra_branch_tol)
-                relative_means[branch] = np.dot(programs[branch], coefficients)
-            diverges = sut.diverging_parallel(parallel[key], relative_means,
-                                              tree.G, tol=inter_branch_tol)
-    return programs, relative_means
 
 
 def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1):
@@ -403,7 +349,7 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
                              beta=2, scale=True, scale_v=0.7):
     """
     Simulate the expression matrix of a differentiation if the data came from
-    a time series experiment.
+    a time series experimentree.
 
     Taking a sample from a culture of differentiating cells returns a mixture of
     cells at different stages of progress through differentiation (pseudotime).
@@ -417,13 +363,13 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
         A lineage tree
     cells: list or int
         If a list, then the number of cells to be sampled from each sample
-        point. If an integer, then the total number of cells to be sampled
+        pointree. If an integer, then the total number of cells to be sampled
         (will be divided equally among all sample points)
     series_points: list
         A list of the pseudotime sample points
     point_std: list or float
-        The standard deviation with which to sample around every sample point.
-        Use a list for differing std at each time point.
+        The standard deviation with which to sample around every sample pointree.
+        Use a list for differing std at each time pointree.
     alpha: float or ndarray, optional
         Parameter for the count-drawing distribution. Float if it is the same
         for all genes, else an ndarray
@@ -462,7 +408,7 @@ def draw_times(timepoint, no_cells, max_time, var=4):
     """
     Draw cell pseudotimes around a certain sample time point under the
     assumption that in an asynchronously differentiating population cells are
-    normally distributed around t. The variance of the normal distribution
+    normally distributed around tree. The variance of the normal distribution
     controls the speed of differentiation (high spread: transient state/fast
     differentiation, low spread: bottleneck/slow differentiation).
 

@@ -11,6 +11,7 @@ import collections
 from collections import defaultdict
 import numbers
 import sys
+from collections import deque
 
 import numpy as np
 from numpy import random
@@ -234,6 +235,9 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
         A list of the boolean values: whether each pair of parallel branches
         diverges or not
     """
+    branches = [b for b in branches if b is not None]
+    if len(branches) == 1:
+        return [True]
     indices = flat_order(len(branches))
     diverging = np.zeros(len(indices), dtype=bool)
     for index, i, j in indices:
@@ -502,3 +506,56 @@ def process_timeseries_input(series_points, cells, point_std):
         series_points = np.array(series_points, dtype=int)
 
     return series_points, cells, point_std
+
+
+def breadth_first_branches(tree):
+    start = tree.root
+    levels = np.ones(len(tree.branches)) * -1
+    levels[start] = 0
+    bfs_topology = bfs_finder(np.array(tree.topology), 0)
+    for pair in bfs_topology:
+        levels[pair[1]] = levels[pair[0]] + 1
+    bfs = np.array(tree.branches)[np.argsort(levels)]
+    return bfs
+
+
+def bfs_finder(d, start):
+    sorter = np.argsort(d[:, 0])
+    done = set()
+    todo = deque([start])
+    output = np.empty_like(d)
+    pos = 0
+    while todo:
+        key = todo.popleft()
+        if key in done:
+            continue
+        done.add(key)
+        left = np.searchsorted(d[:, 0], key, 'left', sorter)
+        if left >= d.shape[0] or d[sorter[left], 0] != key:
+            continue
+        right = np.searchsorted(d[:, 0], key, 'right', sorter)
+        next = pos + right - left
+        output[pos:next, :] = d[sorter[left:right], :]
+        todo.extend(output[pos:next, 1])
+        pos = next
+    return output
+
+
+def adjust_to_parent(relative_means, current, topology):
+    parent_loc = (topology[:, 1] == current)
+    if not np.any(parent_loc):
+        return relative_means[current]
+    branch_from = topology[parent_loc][0][0]
+    branch_to = current
+    adjust_from = relative_means[branch_to]
+    adjust_to = relative_means[branch_from]
+    res = bifurc_adjust(adjust_from, adjust_to)
+    return res
+
+
+def find_parallel(tree, programs, branch):
+    parallel = tree.get_parallel_branches()
+    for parallels in parallel.values():
+        if branch in parallels:
+            return np.intersect1d(parallels, list(programs.keys()))
+    return [branch, None]
