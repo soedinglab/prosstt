@@ -18,39 +18,6 @@ from prosstt import sim_utils as sut
 from prosstt import count_model as cm
 
 
-def simulate_branch(tree, relative_means, coefficients, branch, tol):
-    topology = np.array(tree.topology)
-    program = sim_expr_branch(tree.time[branch], tree.modules, cutoff=tol)
-    relative_means[branch] = np.dot(program, coefficients)
-    relative_means[branch] = sut.adjust_to_parent(relative_means, branch, topology)
-    return program, relative_means
-
-
-def simulate_expression_programs(tree, tol):
-    """
-    Simulate the relative expression of the lineage tree expression programs
-    for each branch.
-
-    Parameters
-    ----------
-    tol: float
-        Correlation cut-off between expression programs
-
-    Returns
-    -------
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    """
-    if tol > 1 or tol < 0:
-        raise ValueError("value of 'tol' parameter should be between 0 and 1")
-    programs = {}
-    for branch in tree.branches:
-        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules,
-                                           cutoff=tol)
-    return programs
-
-
 def sim_expr_branch(branch_length, expr_progr, cutoff=0.2, max_loops=100):
     """
     Return expr_progr diffusion processes of length T as a matrix W. The output of
@@ -285,22 +252,23 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
               tree.num_branches)
         sys.exit(1)
 
+    topology = np.array(tree.topology)
     coefficients = simulate_coefficients(tree, **kwargs)
     bfs = sut.breadth_first_branches(tree)
     programs = {}
     rel_means = {}
 
     for branch in bfs:
-        programs[branch], rel_means = simulate_branch(tree, rel_means,
-                                                      coefficients, branch,
-                                                      intra_branch_tol)
+        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+        rel_means[branch] = np.dot(programs[branch], coefficients)
+        rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
         above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
         parallels = sut.find_parallel(tree, programs, branch)
         diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
         while above_cutoff or not all(diverges):
-            programs[branch], rel_means = simulate_branch(tree, rel_means,
-                                                          coefficients, branch,
-                                                          intra_branch_tol)
+            programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+            rel_means[branch] = np.dot(programs[branch], coefficients)
+            rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
             above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
             parallels = sut.find_parallel(tree, programs, branch)
             diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
