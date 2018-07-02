@@ -9,9 +9,10 @@ are possible.
 
 import collections
 from collections import defaultdict
+from collections import deque
+import operator
 import numbers
 import sys
-from collections import deque
 
 import numpy as np
 from numpy import random
@@ -525,12 +526,13 @@ def breadth_first_branches(tree):
         The tree branches in the order of traversal (breadth-first).
     """
     start = tree.root
-    levels = np.ones(len(tree.branches)) * -1
+    levels = {branch: -1 for branch in tree.branches}
     levels[start] = 0
-    bfs_topology = bfs_finder(np.array(tree.topology), 0)
+    bfs_topology = bfs_finder(np.array(tree.topology), start)
     for pair in bfs_topology:
         levels[pair[1]] = levels[pair[0]] + 1
-    bfs = np.array(tree.branches)[np.argsort(levels)]
+    sorted_levels = sorted(levels.items(), key=operator.itemgetter(1))
+    bfs = np.array(sorted_levels)[:, 0]
     return bfs
 
 
