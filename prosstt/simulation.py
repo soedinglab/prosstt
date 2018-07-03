@@ -368,6 +368,7 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
     for t, n, var in zip(series_points, cells, point_std):
         times_around_t = draw_times(t, n, max_time, var)
         pseudotimes.extend(times_around_t)
+    pseudotimes = np.array(pseudotimes)
     return _sample_data_at_times(tree, pseudotimes, alpha=alpha, beta=beta,
                                  scale=scale, scale_v=scale_v)
 
