@@ -322,17 +322,19 @@ def belongs_to(timezone, branch):
 
 def pick_branches(tree, pseudotime):
     """
-    Lorem ipsum dolor et ames.
+    Randomly pick a corresponding branch for a list of pseudotime values.
 
     Parameters
     ----------
-    a: int
-        Lorem ipsum
+    tree: Tree
+        A lineage tree object.
+    pseudotime: list
+        A list of pseudotime values.
 
     Returns
     -------
-    b: int
-        Lorem ipsum as well
+    branches: list
+        Branch assignments for each pseudotime value.
     """
     timezone = tree.populate_timezone()
     assignments = assign_branches(tree.branch_times(), timezone)
@@ -348,6 +350,8 @@ def pick_branch(tree, pseudotime, timezones, assignments):
 
     Parameters
     ----------
+    tree: Tree
+        A lineage tree object.
     pseudotime: int
         A pseudotime point.
     timezones: int array
