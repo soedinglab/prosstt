@@ -338,11 +338,11 @@ def pick_branches(tree, pseudotime):
     assignments = assign_branches(tree.branch_times(), timezone)
     branches = np.zeros(len(pseudotime), dtype=str)
     for n, t in enumerate(pseudotime):
-        branches[n] = pick_branch(t, timezone, assignments)
+        branches[n] = pick_branch(tree, t, timezone, assignments)
     return branches
 
 
-def pick_branch(pseudotime, timezones, assignments):
+def pick_branch(tree, pseudotime, timezones, assignments):
     """
     Picks one of the possible branches for a cell at a given time point.
 
@@ -366,8 +366,13 @@ def pick_branch(pseudotime, timezones, assignments):
             branch = i
             break
     possibilities = assignments[branch]
+    where_in_branch = pseudotime - timezones[branch][0]
+    densities = np.zeros(len(possibilities))
+    for i, b in enumerate(possibilities):
+        densities[i] = tree.density[b][where_in_branch]
+    probabilities = densities / densities.sum()
     try:
-        return random.choice(possibilities)
+        return random.choice(possibilities, p=probabilities)
     except IndexError:
         print(pseudotime)
         print(timezones)

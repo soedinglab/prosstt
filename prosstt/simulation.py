@@ -317,7 +317,7 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
                              beta=2, scale=True, scale_v=0.7):
     """
     Simulate the expression matrix of a differentiation if the data came from
-    a time series experimentree.
+    a time series experiment.
 
     Taking a sample from a culture of differentiating cells returns a mixture of
     cells at different stages of progress through differentiation (pseudotime).
