@@ -9,6 +9,8 @@ are possible.
 
 import collections
 from collections import defaultdict
+from collections import deque
+import operator
 import numbers
 import sys
 
@@ -60,8 +62,7 @@ def random_partition(k, iterable):
 
     Returns
     -------
-    results: list of int lists
-
+    results: list of int lists.
 
     contributed by kennytm on stackoverflow.com/questions/3760752
     """
@@ -150,14 +151,14 @@ def pearson_between_programs(genes, prog1, prog2):
     ----------
     genes: int
         The number of genes in the lineage tree
-    prog1: ndarray
+    prog1: numpy.ndarray
         The first expression program
-    prog2: ndarray
+    prog2: numpy.ndarray
         The second expression program
 
     Returns
     -------
-    pearson: ndarray
+    pearson: numpy.ndarray
         The pearson correlation coefficient for all genes in the two programs
     """
     pearson = np.zeros(genes)
@@ -195,13 +196,16 @@ def calc_relat_means(tree, programs, coefficients):
     Parameters
     ----------
     tree: Tree
-        A lineage tree
+        A lineage tree object.
     programs: Series
         Relative expression for all expression programs on every branch of the
-        lineage tree
-    coefficients: ndarray
+        lineage tree.
+    coefficients: numpy.ndarray
         Array that contains the contribution weight of each expr. program for
         each gene
+    
+    Returns
+    -------
     """
     relative_means = {}
     for branch in tree.branches:
@@ -217,23 +221,26 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
     Parameters
     ----------
     branches: list
-        A list of pairs of parallel branches
+        A list of pairs of parallel branches.
     programs: Series
         Relative expression for all expression programs on every branch of the
-        lineage tree
+        lineage tree.
     genes: int
-        The number of genes included in the lineage tree
+        The number of genes included in the lineage tree.
     tol: float, optional
         The percentage of genes that must have anticorrelated expression
         patterns over pseudotime in order for the branches to be considered
-        diverging
+        diverging.
 
     Returns
     -------
-    diverging: ndarray
+    diverging: numpy.ndarray
         A list of the boolean values: whether each pair of parallel branches
-        diverges or not
+        diverges or not.
     """
+    branches = [b for b in branches if b is not None]
+    if len(branches) == 1:
+        return [True]
     indices = flat_order(len(branches))
     diverging = np.zeros(len(indices), dtype=bool)
     for index, i, j in indices:
@@ -315,32 +322,36 @@ def belongs_to(timezone, branch):
 
 def pick_branches(tree, pseudotime):
     """
-    Lorem ipsum dolor et ames.
+    Randomly pick a corresponding branch for a list of pseudotime values.
 
     Parameters
     ----------
-    a: int
-        Lorem ipsum
+    tree: Tree
+        A lineage tree object.
+    pseudotime: list
+        A list of pseudotime values.
 
     Returns
     -------
-    b: int
-        Lorem ipsum as well
+    branches: list
+        Branch assignments for each pseudotime value.
     """
     timezone = tree.populate_timezone()
     assignments = assign_branches(tree.branch_times(), timezone)
     branches = np.zeros(len(pseudotime), dtype=str)
     for n, t in enumerate(pseudotime):
-        branches[n] = pick_branch(t, timezone, assignments)
+        branches[n] = pick_branch(tree, t, timezone, assignments)
     return branches
 
 
-def pick_branch(pseudotime, timezones, assignments):
+def pick_branch(tree, pseudotime, timezones, assignments):
     """
     Picks one of the possible branches for a cell at a given time point.
 
     Parameters
     ----------
+    tree: Tree
+        A lineage tree object.
     pseudotime: int
         A pseudotime point.
     timezones: int array
@@ -359,8 +370,13 @@ def pick_branch(pseudotime, timezones, assignments):
             branch = i
             break
     possibilities = assignments[branch]
+    where_in_branch = pseudotime - timezones[branch][0]
+    densities = np.zeros(len(possibilities))
+    for i, b in enumerate(possibilities):
+        densities[i] = tree.density[b][where_in_branch]
+    probabilities = densities / densities.sum()
     try:
-        return random.choice(possibilities)
+        return random.choice(possibilities, p=probabilities)
     except IndexError:
         print(pseudotime)
         print(timezones)
@@ -373,24 +389,24 @@ def max_relat_exp(tree, relative_means):
 
     Parameters
     ----------
-    tree: Tree object
-        The lineage tree in question
+    tree: Tree
+        A lineage tree object.
     relative_means: Series
-        Relative mean expression for all genes on every lineage tree branch
+        Relative mean expression for all genes on every lineage tree branch.
 
     Returns
     -------
-    maxes: ndarray
+    maxes: numpy.ndarray
         An array with the maximum relative expression of each gene along the
-        lineage tree
+        lineage tree.
     """
     maxes = np.zeros((tree.G, len(tree.branches)))
     for i, branch in enumerate(tree.branches):
-        maxes[:, i] = np.max(relative_means[branch], axis=0)
+        maxes[:, i] = np.max(np.exp(relative_means[branch]), axis=0)
     return maxes
 
 
-def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, gene_std=1):
+def simulate_base_gene_exp(tree, relative_means, abs_max=5000, gene_mean=0.8, gene_std=1):
     """
     Samples appropriate base expression values for each gene. The criterion
     applied is that the absolute average gene expression does not surpass a
@@ -398,8 +414,8 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, ge
 
     Parameters
     ----------
-    tree: Tree object
-        The lineage tree
+    tree: Tree
+        A lineage tree object.
     relative_means: Series
         Relative mean expression for all genes on every lineage tree branch
     abs_max: int, optional
@@ -414,7 +430,7 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, ge
 
     Returns
     -------
-    base_gene_exp: ndarray
+    base_gene_exp: numpy.ndarray
         An array that contains base expression values for each gene
     """
     base_gene_exp = np.zeros(tree.G)
@@ -426,7 +442,9 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=1000, gene_mean=0.8, ge
 
     for gene in range(tree.G):
         tmp = np.exp(log_generator.rvs())
+        counter = 0
         while tmp * max_per_gene[gene] > abs_max:
+            counter = counter + 1
             tmp = np.exp(log_generator.rvs())
         base_gene_exp[gene] = tmp
     return base_gene_exp
@@ -448,7 +466,7 @@ def calc_scalings(cells, scale=True, scale_v=0.7):
 
     Returns
     -------
-    scalings: ndarray
+    scalings: numpy.ndarray
         A library size factor for each cell
     """
     if scale:
@@ -477,12 +495,12 @@ def process_timeseries_input(series_points, cells, point_std):
 
     Returns
     -------
-    series_points: ndarray
+    series_points: numpy.ndarray
         The pseudotime sample points for the time series experiment
-    cells: ndarray
+    cells: numpy.ndarray
         The cells to be sampled at each sample point of the time series
         experiment
-    point_std: ndarray
+    point_std: numpy.ndarray
         The cell density at each sample point of the time series experiment
     """
     no_samples = len(series_points)
@@ -500,3 +518,128 @@ def process_timeseries_input(series_points, cells, point_std):
         series_points = np.array(series_points, dtype=int)
 
     return series_points, cells, point_std
+
+
+def breadth_first_branches(tree):
+    """
+    Performs a breadth-first traversal of the tree topology.
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree object.
+
+    Returns
+    -------
+    bfs: list
+        The tree branches in the order of traversal (breadth-first).
+    """
+    start = tree.root
+    levels = {branch: -1 for branch in tree.branches}
+    levels[start] = 0
+    bfs_topology = bfs_finder(np.array(tree.topology), start)
+    for pair in bfs_topology:
+        levels[pair[1]] = levels[pair[0]] + 1
+    sorted_levels = sorted(levels.items(), key=operator.itemgetter(1))
+    bfs = np.array(sorted_levels)[:, 0]
+    return bfs
+
+
+def bfs_finder(graph, start):
+    """
+    Perform a breadth-first search where the graph is a list of connections.
+
+    Parameters
+    ----------
+    graph: numpy.ndarray
+        A numpy array of shape (N, 2). Every row [a, b] describes a connection from
+        branch a to branch b.
+    start: int
+        The root node from which to start the traversal.
+
+    Returns
+    -------
+    output: numpy.ndarray
+        The input graph sorted by breadth-first traversal order.
+
+    Originally answered by StackOverflow user https://stackoverflow.com/users/2988730
+    for question https://stackoverflow.com/questions/50589804.
+    """
+    sorter = np.argsort(graph[:, 0])
+    done = set()
+    todo = deque([start])
+    output = np.empty_like(graph)
+    pos = 0
+    while todo:
+        key = todo.popleft()
+        if key in done:
+            continue
+        done.add(key)
+        left = np.searchsorted(graph[:, 0], key, 'left', sorter)
+        if left >= graph.shape[0] or graph[sorter[left], 0] != key:
+            continue
+        right = np.searchsorted(graph[:, 0], key, 'right', sorter)
+        next_pos = pos + right - left
+        output[pos:next_pos, :] = graph[sorter[left:right], :]
+        todo.extend(output[pos:next_pos, 1])
+        pos = next_pos
+    return output
+
+
+def adjust_to_parent(relative_means, current, topology):
+    """
+    Adds a vector to the relative means of the current branch such that its first
+    row is equal to the last row of the relative means of the branch that precedes
+    it.
+
+    Parameters
+    ----------
+    relative_means: Series
+        Relative mean expression for all genes on every (currently available) lineage
+        tree branch.
+    current: int
+        The current branch to be adjusted.
+    topology: numpy.ndarray
+        The tree topology in array format.
+
+    Returns
+    -------
+    res: numpy.ndarray
+        Adjusted relative expression matrix for the current branch.
+    """
+    parent_loc = (topology[:, 1] == current)
+    if not np.any(parent_loc):
+        return relative_means[current]
+    branch_from = topology[parent_loc][0][0]
+    branch_to = current
+    adjust_from = relative_means[branch_to]
+    adjust_to = relative_means[branch_from]
+    res = bifurc_adjust(adjust_from, adjust_to)
+    return res
+
+
+def find_parallel(tree, programs, branch):
+    """
+    Find all branches that are parallel to the input branch (have same parent branch).
+
+    Parameters
+    ----------
+    tree: Tree
+        A lineage tree object.
+    programs: Series
+        Relative expression for all expression programs on every branch of the
+        lineage tree.
+    branch: int
+        The branch to examine.
+
+    Returns
+    -------
+    list
+        A list of branches that are parallel to the input branch, including the 
+        branch itself.
+    """
+    parallel = tree.get_parallel_branches()
+    for parallels in parallel.values():
+        if branch in parallels:
+            return np.intersect1d(parallels, list(programs.keys()))
+    return [branch, None]

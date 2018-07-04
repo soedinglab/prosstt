@@ -52,12 +52,7 @@ def save_files(job_id, save_dir, X, labs, brns, scalings, uMs, H, gene_scale, al
     np.savetxt(fname=save_dir + "/" + job_id + "_h.txt", X=H)
 
     for branch in uMs.keys():
-        np.savetxt(fname=save_dir +
-                         "/" +
-                         job_id +
-                         "_ums" +
-                         str(branch) +
-                         ".txt",
+        np.savetxt(fname=save_dir + "/" + job_id + "_ums" + str(branch) + ".txt",
                    X=uMs[branch])
 
 
@@ -104,16 +99,8 @@ def main(job_id, save_dir, num_brpoints, plot):
 
     branches = np.unique(np.array(top).flatten())
     time = {b: 50 for b in branches}
-    # pseudotime smaller than 20 makes little sense as that usually does
-    # not give the random walk enough time to create useful variation
-    # br_lengths = random.random_integers(20, 100, num_branches)
 
-    br_compl = random.randint(10, 50+1)
-    # more than 50 components is too much and needlessly increases
-    # runtime
-
-    t = tree.Tree(topology=top, time=time, num_branches=num_branches,
-                  modules=br_compl, G=G)
+    t = tree.Tree(topology=top, time=time, num_branches=num_branches, G=G)
 
     Ms = {}
     uMs, Ws, H = sim.simulate_lineage(t, a=0.05, intra_branch_tol=0)

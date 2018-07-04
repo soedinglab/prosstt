@@ -46,14 +46,13 @@ class Tree(object):
 
     # default values for when the user is not decided
     def_time = 40
-    def_comp = 15
     def_genes = 500
 
     def __init__(self, topology=[["A", "B"], ["A", "C"]],
                  time={"A":def_time, "B":def_time, "C":def_time},
                  num_branches=3,
                  branch_points=1,
-                 modules=def_comp,
+                 modules=None,
                  G=def_genes,
                  density=None,
                  root=None):
@@ -61,10 +60,14 @@ class Tree(object):
         self.time = pd.Series(time, name="time")
         self.num_branches = num_branches
         self.branch_points = branch_points
-        self.modules = modules
         self.G = G
         self.means = None
         self.branches = list(time.keys())
+
+        if modules is None:
+            self.modules = 5 * branch_points + np.random.randint(1, 20)
+        else:
+            self.modules = modules
 
         if root is None:
             self.root = self.branches[0]
@@ -104,8 +107,8 @@ class Tree(object):
 
     @classmethod
     def from_newick(cls, newick_tree,
-                    modules=10,
-                    genes=200,
+                    modules=None,
+                    genes=def_genes,
                     density=None):
         """
         Generate a lineage tree from a Newick-formatted string.

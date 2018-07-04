@@ -18,31 +18,6 @@ from prosstt import sim_utils as sut
 from prosstt import count_model as cm
 
 
-def simulate_expression_programs(tree, tol):
-    """
-    Simulate the relative expression of the lineage tree expression programs
-    for each branch.
-
-    Parameters
-    ----------
-    tol: float
-        Correlation cut-off between expression programs
-
-    Returns
-    -------
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    """
-    if tol > 1 or tol < 0:
-        raise ValueError("value of 'tol' parameter should be between 0 and 1")
-    programs = {}
-    for branch in tree.branches:
-        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules,
-                                           cutoff=tol)
-    return programs
-
-
 def sim_expr_branch(branch_length, expr_progr, cutoff=0.2, max_loops=100):
     """
     Return expr_progr diffusion processes of length T as a matrix W. The output of
@@ -129,10 +104,11 @@ def diffusion(steps):
     velocity = np.zeros(steps)
     walk = np.zeros(steps)
 
-    walk[0] = sp.stats.uniform.rvs()
+    # walk[0] = sp.stats.uniform.rvs()
+    walk[0] = 0
     velocity[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
-    s_eps = 1 / steps
+    s_eps = 2 / steps
     eta = sp.stats.uniform.rvs()
 
     for t in range(0, steps - 1):
@@ -145,7 +121,7 @@ def diffusion(steps):
     return walk
 
 
-def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
+def simulate_coefficients(tree, fallback_a=0.04, **kwargs):
     """
     H encodes how G genes are expressed by defining their membership to K
     expression modules (coded in a matrix W). H could be told to encode
@@ -172,7 +148,7 @@ def simulate_coefficients(tree, fallback_a=0.05, **kwargs):
     """
     if "a" not in kwargs.keys():
         warnings.warn(
-            "No argument 'a' specified in kwargs: using gamma and a=0.05", UserWarning)
+            "No argument 'a' specified in kwargs: using gamma and a=0.04", UserWarning)
         return _sim_coeff_gamma(tree, fallback_a)
     # if a, b are present: beta distribution
     if "b" in kwargs.keys():
@@ -233,7 +209,8 @@ def _sim_coeff_gamma(tree, a=0.05):
     return coefficients
 
 
-def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
+def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
+                     inter_branch_tol=0, **kwargs):
     """
     Simulate gene expression for each point of the lineage tree (each
     possible pseudotime/branch combination). The simulation will try to make
@@ -245,6 +222,9 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
     ----------
     tree: Tree
         A lineage tree
+    rel_exp_cutoff: float, optional
+        The log threshold for the maximum average expression before scaling.
+        Recommended values are below 9 (exp(9) is about 8100).
     intra_branch_tol: float, optional
         The threshold for correlation between expression programs in the same
         branch
@@ -258,7 +238,7 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
 
     Returns
     -------
-    relative_means: Series
+    rel_means: Series
         Relative mean expression for all genes on every lineage tree branch
     programs: Series
         Relative expression for all expression programs on every branch of the
@@ -272,73 +252,30 @@ def simulate_lineage(tree, intra_branch_tol=0.2, inter_branch_tol=0, **kwargs):
               tree.num_branches)
         sys.exit(1)
 
+    topology = np.array(tree.topology)
     coefficients = simulate_coefficients(tree, **kwargs)
-    programs = simulate_expression_programs(tree, intra_branch_tol)
+    bfs = sut.breadth_first_branches(tree)
+    programs = {}
+    rel_means = {}
 
-    # check that parallel branches don't overlap too much
-    programs, relative_means = correct_parallel(tree, programs, coefficients,
-                                                intra_branch_tol, inter_branch_tol)
+    for branch in bfs:
+        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+        rel_means[branch] = np.dot(programs[branch], coefficients)
+        rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
+        above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
+        parallels = sut.find_parallel(tree, programs, branch)
+        diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
+        while above_cutoff or not all(diverges):
+            programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+            rel_means[branch] = np.dot(programs[branch], coefficients)
+            rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
+            above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
+            parallels = sut.find_parallel(tree, programs, branch)
+            diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
 
-    # adjust the ends of the relative mean expression matrices
-    for branch_pair in tree.topology:
-        branch_from = branch_pair[0]
-        branch_to = branch_pair[1]
-        adjust_from = relative_means[branch_to]
-        adjust_to = relative_means[branch_from]
-        relative_means[branch_to] = sut.bifurc_adjust(adjust_from, adjust_to)
-
-    return (pd.Series(relative_means),
+    return (pd.Series(rel_means),
             pd.Series(programs),
             coefficients)
-
-
-def correct_parallel(tree, programs, coefficients, intra_branch_tol=0.2, inter_branch_tol=0.5):
-    """
-    Check if parallel branches diverge and if not re-draw the expression
-    programs for these branches.
-
-    Parameters
-    ----------
-    tree: Tree
-        A lineage tree
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    coefficients: ndarray
-        A sparse matrix of the contribution of K expression programs to G genes
-    intra_branch_tol: float, optional
-        The threshold for correlation between expression programs in the same
-        branch
-    inter_branch_tol: float, optional
-        The threshold for anticorrelation between relative gene expression in
-        parallel branches
-
-    Returns
-    -------
-    programs: dict
-        Relative expression for all expression programs on every branch of the
-        lineage tree
-    relative_means: dict
-        Relative gene expression for each tree branch
-    """
-    # calculate relative means over tree
-    relative_means = sut.calc_relat_means(tree, programs, coefficients)
-    # find parallel branches
-    parallel = tree.get_parallel_branches()
-    # for all parallel branches check if they are diverging.
-    # if not, fix.
-    for key in parallel:
-        diverges = sut.diverging_parallel(parallel[key], relative_means,
-                                          tree.G, tol=inter_branch_tol)
-        while not all(diverges):
-            for branch in parallel[key]:
-                programs[branch] = sim_expr_branch(tree.time[branch],
-                                                   tree.modules,
-                                                   cutoff=intra_branch_tol)
-                relative_means[branch] = np.dot(programs[branch], coefficients)
-            diverges = sut.diverging_parallel(parallel[key], relative_means,
-                                              tree.G, tol=inter_branch_tol)
-    return programs, relative_means
 
 
 def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1):
@@ -370,9 +307,6 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
         Library size scaling factor for each cell
     """
     sample_time = np.arange(0, tree.get_max_time())
-    gene_scale = np.exp(sp.stats.norm.rvs(
-        loc=gene_loc, scale=gene_s, size=tree.G))
-    means = {}
     tree.default_gene_expression()
     alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
 
@@ -397,13 +331,13 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
         A lineage tree
     cells: list or int
         If a list, then the number of cells to be sampled from each sample
-        point. If an integer, then the total number of cells to be sampled
+        pointree. If an integer, then the total number of cells to be sampled
         (will be divided equally among all sample points)
     series_points: list
         A list of the pseudotime sample points
     point_std: list or float
-        The standard deviation with which to sample around every sample point.
-        Use a list for differing std at each time point.
+        The standard deviation with which to sample around every sample pointree.
+        Use a list for differing std at each time pointree.
     alpha: float or ndarray, optional
         Parameter for the count-drawing distribution. Float if it is the same
         for all genes, else an ndarray
@@ -434,6 +368,7 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
     for t, n, var in zip(series_points, cells, point_std):
         times_around_t = draw_times(t, n, max_time, var)
         pseudotimes.extend(times_around_t)
+    pseudotimes = np.array(pseudotimes)
     return _sample_data_at_times(tree, pseudotimes, alpha=alpha, beta=beta,
                                  scale=scale, scale_v=scale_v)
 
@@ -442,7 +377,7 @@ def draw_times(timepoint, no_cells, max_time, var=4):
     """
     Draw cell pseudotimes around a certain sample time point under the
     assumption that in an asynchronously differentiating population cells are
-    normally distributed around t. The variance of the normal distribution
+    normally distributed around tree. The variance of the normal distribution
     controls the speed of differentiation (high spread: transient state/fast
     differentiation, low spread: bottleneck/slow differentiation).
 
