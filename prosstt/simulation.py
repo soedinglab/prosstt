@@ -248,9 +248,8 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
         each gene
     """
     if not len(tree.time) == tree.num_branches:
-        print("the parameters are not enough for %i branches" %
+        raise ValueError("the parameters are not enough for %i branches" %
               tree.num_branches)
-        sys.exit(1)
 
     topology = np.array(tree.topology)
     coefficients = simulate_coefficients(tree, **kwargs)
