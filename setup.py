@@ -10,7 +10,7 @@ setup(
     # scripts=['say_hello.py'],
 
     install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'newick'],
-
+    python_requires=">=3.5",
     # metadata
     author="Nikolaos Papadopoulos, Johannes Soeding",
     author_email="npapado@mpibpc.mpg.de",

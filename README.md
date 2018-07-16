@@ -20,7 +20,7 @@ PROSSTT can be installed using the `pip` package manager or any `pip`-compatible
 
 ### Dependencies
 
-PROSSTT was developed and tested in [Python 3.5](https://www.python.org/downloads/release/python-350/) and [3.6](https://www.python.org/downloads/release/python-360/). While older Python 3 versions should work, there is no guarantee that they will. PROSSTT requires:
+PROSSTT was developed and tested in [Python 3.5](https://www.python.org/downloads/release/python-350/) and [3.6](https://www.python.org/downloads/release/python-360/). PROSSTT requires:
 
 * [`numpy`](www.numpy.org), for data structures
 * [`scipy`](https://www.scipy.org/), for probabilistic distributions and special functions
