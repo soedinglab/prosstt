@@ -278,7 +278,7 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
             coefficients)
 
 
-def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1):
+def sample_whole_tree_restricted(tree, alpha=0.2, beta=3):
     """
     Bare-bones simulation where the lineage tree is simulated using default
     parameters. Branches are assigned randomly if multiple are possible.
@@ -291,11 +291,6 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
         Average alpha value
     beta: float, optional
         Average beta value
-    gene_loc: float, optional
-        Mean of the log-normal distribution of base gene expression values
-    gene_s: float, optional
-        Standard deviation of base gene expression value distribution
-        (log-normal)
 
     Returns
     -------
