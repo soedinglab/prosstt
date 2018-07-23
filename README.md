@@ -6,19 +6,26 @@ Single-cell RNAseq is revolutionizing cellular biology, and many algorithms are 
 
 ### Installation
 
+#### Installation with `pip`
+
 PROSSTT can be installed using the `pip` package manager or any `pip`-compatible package manager:
+
+	pip install git+git://github.com/soedinglab/prosstt.git
+
+#### Installation from source
 
 	git clone https://github.com/soedinglab/prosstt.git
 	cd prosstt
-	pip install .
+	python setup.py install
 
 ### Dependencies
 
-PROSSTT was developed and tested in [Python 3.5](https://www.python.org/downloads/release/python-350/) and [3.6](https://www.python.org/downloads/release/python-360/). While older Python 3 versions should work, there is no guarantee that they will. PROSSTT requires:
+PROSSTT was developed and tested in [Python 3.5](https://www.python.org/downloads/release/python-350/) and [3.6](https://www.python.org/downloads/release/python-360/). PROSSTT requires:
 
 * [`numpy`](www.numpy.org), for data structures
 * [`scipy`](https://www.scipy.org/), for probabilistic distributions and special functions
 * [`pandas`](https://pandas.pydata.org/), for I/O
+* [`newick`](https://pypi.org/project/newick/), for the (Newick tree file format)[http://evolution.genetics.washington.edu/phylip/newick_doc.html]
 
 We also recommend the following libraries:
 

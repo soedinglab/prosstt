@@ -248,9 +248,8 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
         each gene
     """
     if not len(tree.time) == tree.num_branches:
-        print("the parameters are not enough for %i branches" %
-              tree.num_branches)
-        sys.exit(1)
+        raise ValueError("the parameters are not enough for %i branches" %
+                         tree.num_branches)
 
     topology = np.array(tree.topology)
     coefficients = simulate_coefficients(tree, **kwargs)
@@ -259,19 +258,24 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
     rel_means = {}
 
     for branch in bfs:
-        programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+        programs[branch] = sim_expr_branch(
+            tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+        programs[branch] = sut.adjust_to_parent(programs, branch, topology)
         rel_means[branch] = np.dot(programs[branch], coefficients)
-        rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
         above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
         parallels = sut.find_parallel(tree, programs, branch)
-        diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
+        diverges = sut.diverging_parallel(
+            parallels, rel_means, tree.G, tol=inter_branch_tol)
         while above_cutoff or not all(diverges):
-            programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+            programs[branch] = sim_expr_branch(
+                tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+            programs[branch] = sut.adjust_to_parent(
+                programs, branch, topology)
             rel_means[branch] = np.dot(programs[branch], coefficients)
-            rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
             above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
             parallels = sut.find_parallel(tree, programs, branch)
-            diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
+            diverges = sut.diverging_parallel(
+                parallels, rel_means, tree.G, tol=inter_branch_tol)
 
     return (pd.Series(rel_means),
             pd.Series(programs),
@@ -308,7 +312,8 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3, gene_loc=0.8, gene_s=1
     """
     sample_time = np.arange(0, tree.get_max_time())
     tree.default_gene_expression()
-    alphas, betas = cm.generate_negbin_params(tree, mean_alpha=alpha, mean_beta=beta)
+    alphas, betas = cm.generate_negbin_params(
+        tree, mean_alpha=alpha, mean_beta=beta)
 
     return _sample_data_at_times(tree, sample_time, alpha=alphas, beta=betas)
 
