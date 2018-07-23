@@ -248,9 +248,8 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
         each gene
     """
     if not len(tree.time) == tree.num_branches:
-        print("the parameters are not enough for %i branches" %
-              tree.num_branches)
-        sys.exit(1)
+        raise ValueError("the parameters are not enough for %i branches" %
+                         tree.num_branches)
 
     topology = np.array(tree.topology)
     coefficients = simulate_coefficients(tree, **kwargs)
@@ -260,15 +259,15 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
 
     for branch in bfs:
         programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+        programs[branch] = sut.adjust_to_parent(programs, branch, topology)
         rel_means[branch] = np.dot(programs[branch], coefficients)
-        rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
         above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
         parallels = sut.find_parallel(tree, programs, branch)
         diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
         while above_cutoff or not all(diverges):
             programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
+            programs[branch] = sut.adjust_to_parent(programs, branch, topology)
             rel_means[branch] = np.dot(programs[branch], coefficients)
-            rel_means[branch] = sut.adjust_to_parent(rel_means, branch, topology)
             above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
             parallels = sut.find_parallel(tree, programs, branch)
             diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
