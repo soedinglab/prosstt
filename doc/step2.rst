@@ -1,3 +1,5 @@
+.. _step2-label:
+
 Simulate average gene expression along tree
 ===========================================
 

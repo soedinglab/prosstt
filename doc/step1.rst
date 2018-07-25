@@ -16,7 +16,7 @@ This can happen in various ways:
 Manual definition
 -----------------
 
-The ``Tree()`` constructor can be called directly::
+The ``Tree()`` constructor can be called directly with a topology that describes branch connectivity, a pseudotime length for each branch, the total number of branches and branch points, as well as values for the number of genes and expression programs (modules) (see :ref:`step2-label`)::
 
     from prosstt.tree import Tree
     t = Tree(topology=[["A", "B"], ["A", "C"]],
@@ -33,7 +33,7 @@ If ``density=None`` is passed (or if no value for the parameter is given), PROSS
 From a Newick-formatted string
 ------------------------------
 
-A Newick-formatted string can be used instead; in this case PROSSTT will parse the topology from the Newick string::
+A Newick-formatted string can be used instead; in this case PROSSTT will parse the topology from the Newick string. It is important to note that just like in the manual definition, the Newick tree describes branches and their connections::
 
     import newick
     from prosstt.tree import Tree
