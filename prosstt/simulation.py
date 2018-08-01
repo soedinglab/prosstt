@@ -629,3 +629,28 @@ def draw_counts(tree, pseudotime, branches, scalings, alpha, beta):
     # custm = cm.my_negbin()
     # expr_matrix = custm.rvs(p_total, r_total)
     return expr_matrix.reshape((no_cells, tree.G))
+
+
+def add_non_diff_genes(inform_expr_matrix, genes, gene_params, cell_scalings):
+    N, G = inform_expr_matrix.shape
+
+    alpha = gene_params["alpha"]
+    beta = gene_params["beta"]
+    cell_avg_exp = np.outer(cell_scalings, gene_params["base_expr"])
+
+    p_total = np.zeros(N * genes)
+    r_total = np.zeros(N * genes)
+
+    for cell in range(N):
+        p, r = cm.get_pr_umi(a=alpha, b=beta, m=cell_avg_exp[cell])
+        p_total[cell * genes:(cell + 1) * genes] = p
+        r_total[cell * genes:(cell + 1) * genes] = r
+
+    nbinom = sp.stats.nbinom(n=r_total, p=(1 - p_total))
+    noninform_expr_matrix = nbinom.rvs()
+    noninform_expr_matrix = noninform_expr_matrix.reshape((N, genes))
+
+    fusion = np.zeros((N, G + genes))
+    fusion[:, 0:G] = inform_expr_matrix
+    fusion[:, G:] = noninform_expr_matrix
+    return fusion
