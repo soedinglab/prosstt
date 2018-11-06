@@ -50,7 +50,7 @@ def sim_expr_branch(branch_length, expr_progr, cutoff=0.2, max_loops=100):
         differentiation in this branch of the tree
     cutoff: float, optional
         Correlation above the cut-off will be considered too much. Should be
-        between 0 and 1 but is not explicitly tested
+        between -1 and 1 but is not explicitly tested
     max_loops: int, optional
         The maximum number of times the method will try simulating a new
         diffusion process that doesn't correlate with all previous ones in W
