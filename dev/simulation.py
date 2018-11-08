@@ -104,8 +104,8 @@ def diffusion(steps):
     velocity = np.zeros(steps)
     walk = np.zeros(steps)
 
-    # walk[0] = sp.stats.uniform.rvs()
-    walk[0] = 0
+    walk[0] = np.log(sp.stats.uniform.rvs())
+    # walk[0] = 0
     velocity[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
     s_eps = 2 / steps
@@ -116,7 +116,10 @@ def diffusion(steps):
 
         epsilon = sp.stats.norm.rvs(loc=0, scale=s_eps)
         # amortize the update
-        velocity[t + 1] = 0.95 * velocity[t] + epsilon - eta * velocity[t]
+        # velocity[t + 1] = 0.9 * velocity[t] + epsilon - eta * velocity[t]
+        # velocity[t + 1] = 0.95 * velocity[t] + epsilon
+        velocity[t + 1] = eta * velocity[t] + epsilon
+        # velocity[t + 1] = eta * velocity[t] + epsilon
 
     return walk
 
@@ -247,6 +250,7 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
         Array that contains the contribution weight of each expr. program for
         each gene
     """
+    # from IPython.core.debugger import Tracer
     if not len(tree.time) == tree.num_branches:
         raise ValueError("the parameters are not enough for %i branches" %
                          tree.num_branches)
@@ -265,6 +269,7 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
         parallels = sut.find_parallel(tree, programs, branch)
         diverges = sut.diverging_parallel(parallels, rel_means, tree.G, tol=inter_branch_tol)
         while above_cutoff or not all(diverges):
+            # Tracer()()
             programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
             programs[branch] = sut.adjust_to_parent(programs, branch, topology)
             rel_means[branch] = np.dot(programs[branch], coefficients)
