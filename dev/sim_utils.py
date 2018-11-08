@@ -338,7 +338,8 @@ def pick_branches(tree, pseudotime):
     """
     timezone = tree.populate_timezone()
     assignments = assign_branches(tree.branch_times(), timezone)
-    branches = np.zeros(len(pseudotime), dtype=str)
+    branch_type = type(tree.branches[0])
+    branches = np.zeros(len(pseudotime), dtype=branch_type)
     for n, t in enumerate(pseudotime):
         branches[n] = pick_branch(tree, t, timezone, assignments)
     return branches
