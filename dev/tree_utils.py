@@ -99,3 +99,34 @@ def save_params(job_id, save_dir, lineage_tree, rseed):
         out.write("topology: " + str(lineage_tree.topology) + "\n")
         out.write("#modules: " + str(lineage_tree.modules) + "\n")
         out.write("random seed: " + str(rseed))
+
+
+def sanitize_velocity(velocity, minimum_velocity=0.1):
+    global_min = 0
+    for key in velocity:
+        branch_min = np.min(velocity[key])
+        if branch_min < global_min:
+            global_min = branch_min
+
+    if global_min == 0:
+        return velocity
+
+    for key in velocity:
+        velocity[key] = velocity[key] + np.abs(global_min) + minimum_velocity
+
+    return velocity
+
+
+def _density_from_velocity(velocity):
+    total_velocity = 0
+    total_density = 0
+    density = {}
+    for b in velocity:
+        total_velocity += np.sum(velocity[b])
+    for b in velocity:
+        velocity[b] /= total_velocity
+        density[b] = -velocity[b] + np.max(velocity[b]) + np.min(velocity[b])
+        total_density += np.sum(density[b])
+    for b in velocity:
+        density[b] /= total_density
+    return density

@@ -216,17 +216,44 @@ class Tree(object):
             The density of each branch. For each branch b, len(density[b]) must
             equal tree.time[b].
         """
-        if not len(density) == self.branches:
+        if not len(density) == len(self.branches):
             msg = "The number of arrays in density must be equal to the number \
                   of branches in the topology"
             raise ValueError(msg)
-        for i, branch_density in enumerate(density):
-            if not len(branch_density) == self.time[i]:
-                msg = "Branch " + str(i) + " was expected to have a length " \
-                      + str((self.time[i], self.G)) + " and instead is " \
-                      + str(branch_density.shape)
+        for b in density:
+            if not len(density[b]) == self.time[b]:
+                msg = "Branch " + str(b) + " was expected to have a length " \
+                      + str((self.time[b], self.G)) + " and instead is " \
+                      + str(density[b].shape)
                 raise ValueError(msg)
         self.density = density
+
+    
+    def set_velocity(self, velocity):
+        """
+        Sets the velocity with which the cells move through the tree. It is the
+        reverse of the density.
+
+        Parameters
+        ----------
+        velocity: dict
+            The velocity of each branch. For each branch b, len(velocity[b])
+            must be equal to self.time[b].
+        """
+        if not len(velocity) == len(self.branches):
+            msg = "The number of arrays in velocity must be equal to the \
+                   number of branches in the topology"
+            raise ValueError(msg)
+        for b in velocity:
+            if not len(velocity[b]) == self.time[b]:
+                msg = "Branch " + str(b) + " was expected to have a length " \
+                      + str((self.time[b], self.G)) + " and instead is " \
+                      + str(velocity[b].shape)
+                raise ValueError(msg)
+        velocity = tu.sanitize_velocity(velocity)
+        density = tu._density_from_velocity(velocity)
+        self.density = density
+
 
     def get_max_time(self):
         """
