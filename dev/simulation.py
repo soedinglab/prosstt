@@ -313,7 +313,7 @@ def sample_whole_tree_restricted(tree, alpha=0.2, beta=3):
 
 
 def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
-                             beta=2, scale=True, scale_v=0.7):
+                             beta=2, scale=True, scale_mean=0, scale_v=0.7):
     """
     Simulate the expression matrix of a differentiation if the data came from
     a time series experiment.
@@ -369,7 +369,8 @@ def sample_pseudotime_series(tree, cells, series_points, point_std, alpha=0.3,
         pseudotimes.extend(times_around_t)
     pseudotimes = np.array(pseudotimes)
     return _sample_data_at_times(tree, pseudotimes, alpha=alpha, beta=beta,
-                                 scale=scale, scale_v=scale_v)
+                                 scale=scale, scale_mean=scale_mean,
+                                 scale_v=scale_v)
 
 
 def draw_times(timepoint, no_cells, max_time, var=4):
@@ -406,7 +407,8 @@ def draw_times(timepoint, no_cells, max_time, var=4):
     return sample_pt
 
 
-def sample_density(tree, no_cells, alpha=0.3, beta=2, scale=True, scale_v=0.7):
+def sample_density(tree, no_cells, alpha=0.3, beta=2, scale=True,
+                   scale_v=0.7, scale_mean=0.):
     """
     Use cell density along the lineage tree to sample pseudotime/branch pairs
     for the expression matrix.
@@ -458,10 +460,11 @@ def sample_density(tree, no_cells, alpha=0.3, beta=2, scale=True, scale_v=0.7):
 
     return _sample_data_at_times(tree, sample_time, alpha=alpha, beta=beta,
                                  branches=sample_branches, scale=scale,
-                                 scale_v=scale_v)
+                                 scale_mean=scale_mean, scale_v=scale_v)
 
 
-def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7):
+def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True,
+                      scale_mean=0., scale_v=0.7):
     """
     Every possible pseudotime/branch pair on the lineage tree is sampled a
     number of times.
@@ -501,7 +504,7 @@ def sample_whole_tree(tree, n_factor, alpha=0.3, beta=2, scale=True, scale_v=0.7
 
     return _sample_data_at_times(tree, pseudotime, alpha=alpha, beta=beta,
                                  branches=branches, scale=scale,
-                                 scale_v=scale_v)
+                                 scale_mean=scale_mean, scale_v=scale_v)
 
 
 def cover_whole_tree(tree):
@@ -536,7 +539,7 @@ def cover_whole_tree(tree):
 
 
 def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
-                          scale=True, scale_v=0.7):
+                          scale=True, scale_mean=0., scale_v=0.7):
     """
     Sample cells from the lineage tree for given pseudotimes. If branch
     assignments are not specified, cells will be randomly assigned to one of the
@@ -579,7 +582,7 @@ def _sample_data_at_times(tree, sample_pt, branches=None, alpha=0.3, beta=2,
         beta = [beta] * tree.G
     if branches is None:
         branches = sut.pick_branches(tree, sample_pt)
-    scalings = sut.calc_scalings(no_cells, scale, scale_v)
+    scalings = sut.calc_scalings(no_cells, scale, scale_mean, scale_v)
     expr_matrix = draw_counts(tree, sample_pt, branches, scalings, alpha, beta)
     return expr_matrix, sample_pt, branches, scalings
 

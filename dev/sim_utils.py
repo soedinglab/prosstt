@@ -451,7 +451,7 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=5000, gene_mean=0.8, ge
     return base_gene_exp
 
 
-def calc_scalings(cells, scale=True, scale_v=0.7):
+def calc_scalings(cells, scale=True, scale_mean=0, scale_v=0.7):
     """
     Obtain library size factors for each cell.
 
@@ -471,7 +471,7 @@ def calc_scalings(cells, scale=True, scale_v=0.7):
         A library size factor for each cell
     """
     if scale:
-        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=cells))
+        scalings = np.exp(sp.stats.norm.rvs(loc=scale_mean, scale=scale_v, size=cells))
     else:
         scalings = np.ones(cells)
     return scalings
