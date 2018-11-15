@@ -252,6 +252,25 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
     return diverging
 
 
+def commited_branches(tree, branches, rel_means):
+    b1, b2 = branches
+    timezones = tree.populate_timezone()
+    assignments = assign_branches(tree.branch_times(), timezones)
+    matches = [a == branches for a in assignments.values()]
+    matches = np.min(np.where(matches))
+    offsets = np.array([tree.branch_times()[branch][0] for branch in branches])
+    mix = np.array(timezones[matches]) - offsets
+    mix_range = np.arange(mix[0], mix[1] + 1)
+    component_other = np.arange(0, 0.5, 1 / (2 * len(mix_range)))[::-1]
+    component_self = 1 - component_other
+    rel_means[b1] = ((component_self * rel_means[b1][mix_range].transpose()) +
+                     (component_other * rel_means[b2][mix_range].transpose())).transpose()
+
+    rel_means[b2] = ((component_self * rel_means[b2][mix_range].transpose()) +
+                     (component_other * rel_means[b1][mix_range].transpose())).transpose()
+    return rel_means
+
+
 def assign_branches(branch_times, timezone):
     """
     Assigns a branch to every timezone::
