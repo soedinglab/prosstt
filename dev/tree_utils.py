@@ -108,7 +108,7 @@ def sanitize_velocity(velocity, minimum_velocity=0.1):
         if branch_min < global_min:
             global_min = branch_min
 
-    if global_min == 0:
+    if global_min >= 0:
         return velocity
 
     for key in velocity:
@@ -120,12 +120,21 @@ def sanitize_velocity(velocity, minimum_velocity=0.1):
 def _density_from_velocity(velocity):
     total_velocity = 0
     total_density = 0
+    global_min = np.Inf
+    global_max = -np.Inf
     density = {}
     for b in velocity:
         total_velocity += np.sum(velocity[b])
+        if global_max <= np.max(velocity[b]):
+            global_max = np.max(velocity[b])
+        if global_min >= np.min(velocity[b]):
+            global_min = np.min(velocity[b])
+    
+    global_min /= total_velocity
+    global_max /= total_velocity
     for b in velocity:
         velocity[b] /= total_velocity
-        density[b] = -velocity[b] + np.max(velocity[b]) + np.min(velocity[b])
+        density[b] = - velocity[b] + global_max + global_min
         total_density += np.sum(density[b])
     for b in velocity:
         density[b] /= total_density
