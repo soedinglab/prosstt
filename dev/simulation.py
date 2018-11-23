@@ -642,15 +642,14 @@ def draw_counts(tree, pseudotime, branches, scalings, alpha, beta):
 def add_non_diff_genes(inform_expr_matrix, genes, gene_params, cell_scalings):
     N, G = inform_expr_matrix.shape
 
-    alpha = gene_params["alpha"]
-    beta = gene_params["beta"]
-    cell_avg_exp = np.outer(cell_scalings, gene_params["base_expr"])
-
     p_total = np.zeros(N * genes)
     r_total = np.zeros(N * genes)
 
     for cell in range(N):
-        p, r = cm.get_pr_umi(a=alpha, b=beta, m=cell_avg_exp[cell])
+        mu_cell = cell_scalings[cell] * gene_params["base_expr"][cell]
+        p, r = cm.get_pr_umi(a=gene_params["alpha"],
+                             b=gene_params["beta"],
+                             m=mu_cell)
         p_total[cell * genes:(cell + 1) * genes] = p
         r_total[cell * genes:(cell + 1) * genes] = r
 

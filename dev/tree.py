@@ -164,7 +164,7 @@ class Tree(object):
         ----------
         relative_means: dict
             A dictionary of tables that contain relative gene expression for
-            each pseudotime point of every branch (ndarray
+            each pseudotime point of every branch in log space (ndarray
             relative_expression[b] has the dimensions time[b], G)
         base_gene_expr: ndarray
             Contains the base gene expression values for each gene.
@@ -184,7 +184,7 @@ class Tree(object):
         ----------
         average_expression: dict
             A dictionary of tables that contain average gene expression for
-            each pseudotime point of every branch (ndarray
+            each pseudotime point of every branch in log space (ndarray
             average_expression[b] has the dimensions time[b], G)
         """
         # sanity check of dimensions so that in case a user messes up there is
