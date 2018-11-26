@@ -663,3 +663,22 @@ def find_parallel(tree, programs, branch):
         if branch in parallels:
             return np.intersect1d(parallels, list(programs.keys()))
     return [branch, None]
+
+
+def learn_data_summary(cell_stats, gene_stats, relative_means):
+    real_scalings = np.log(cell_stats.loc["total"] / np.mean(cell_stats.loc["total"]))
+    scale_mean = np.mean(real_scalings)
+    scale_var = np.sqrt(np.var(real_scalings))
+
+    fit = np.polyfit(x=gene_stats.loc['means'],
+                     y=gene_stats.loc['var'],
+                     deg=2,
+                     w=1 / gene_stats.loc['var'])
+
+    rel_expr = np.array([relative_means[b] for b in relative_means.index])
+    avg_relative_expr = np.mean(np.mean(np.exp(rel_expr), axis=1), axis=0)
+    proposed_means = gene_stats.loc['means']
+    avg_relative_expr[avg_relative_expr < np.min(proposed_means)] = np.min(proposed_means)
+    proposed_means = np.array(proposed_means) / avg_relative_expr
+
+    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]), proposed_means

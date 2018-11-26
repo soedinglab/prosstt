@@ -64,13 +64,13 @@ def plot(real_name, real, sim, alpha=0.5):
             np.log2(sim_totals /  len(sim_zeros_gene))]
     b1 = ax[2][0].boxplot(data, labels=[real_name, "simulated"])
 
-    # size/zero relationship
-    ax[2][1].set_title("lib. size ~ %zeros (cell)")
-    ax[2][1].set_xlabel("log2(x+1) avg. gene expression")
-    ax[2][1].set_ylabel("percentage zeros per gene")
-    s1 = ax[2][1].scatter(np.log2(real_cells.loc['total'] + 1),
-                          real_cells.loc['zeros'] / real_genes.shape[1],
-                          label=real_name, alpha=alpha)
-    s2 = ax[2][1].scatter(np.log2(sim_totals + 1),
-                          sim_zeros_cell / len(sim_zeros_gene),
-                          label="simulated", alpha=alpha)
+#     # size/zero relationship
+#     ax[2][1].set_title("lib. size ~ %zeros (cell)")
+#     ax[2][1].set_xlabel("log2(x+1) avg. gene expression")
+#     ax[2][1].set_ylabel("percentage zeros per gene")
+#     s1 = ax[2][1].scatter(np.log2(real_cells.loc['total'] + 1),
+#                           real_cells.loc['zeros'] / real_genes.shape[1],
+#                           label=real_name, alpha=alpha)
+#     s2 = ax[2][1].scatter(np.log2(sim_totals + 1),
+#                           sim_zeros_cell / len(sim_zeros_gene),
+#                           label="simulated", alpha=alpha)
