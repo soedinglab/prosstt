@@ -670,15 +670,24 @@ def learn_data_summary(cell_stats, gene_stats, relative_means):
     scale_mean = np.mean(real_scalings)
     scale_var = np.sqrt(np.var(real_scalings))
 
-    fit = np.polyfit(x=gene_stats.loc['means'],
-                     y=gene_stats.loc['var'],
+    nonzero = (gene_stats.loc['var'] > 0) & (gene_stats.loc['means'] > 0)
+    fit = np.polyfit(x=gene_stats.loc['means'][nonzero],
+                     y=gene_stats.loc['var'][nonzero],
                      deg=2,
-                     w=1 / gene_stats.loc['var'])
+                     w=1 / gene_stats.loc['var'][nonzero])
 
     rel_expr = np.array([relative_means[b] for b in relative_means.index])
     avg_relative_expr = np.mean(np.mean(np.exp(rel_expr), axis=1), axis=0)
-    proposed_means = gene_stats.loc['means']
+    proposed_means = gene_stats.loc['means'][nonzero]
     avg_relative_expr[avg_relative_expr < np.min(proposed_means)] = np.min(proposed_means)
-    proposed_means = np.array(proposed_means) / avg_relative_expr
+    # print(np.min(proposed_means))
+    # print(proposed_means.shape, avg_relative_expr.shape, np.sum(nonzero))
+    proposed_means = proposed_means / avg_relative_expr
 
-    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]), proposed_means
+    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]), np.array(proposed_means)
+
+
+def learn_data_variance(gene_stats, proposed_means, alpha_mean, beta_mean,
+                        alpha_var=1.5, beta_var=1.5):
+    print("hello world")
+

@@ -20,10 +20,16 @@ def plot(real_name, real, sim, alpha=0.5):
 
     # mean gene expression
     ax[0][1].set_title("avg. gene expr.")
-    ax[0][1].set_ylabel("log2(x+1) of mean gene expr.")
-    data = [np.log2(real_genes.loc['means']+1),
-            np.log2(sim_means+1)]
-    b1 = ax[0][1].boxplot(data, labels=[real_name, "simulated"])
+    ax[0][1].set_xlabel("log2(x+1) avg. expr. data")
+    ax[0][1].set_ylabel("log2(x+1) avg. expr. simulation")
+    ax[0][1].scatter(np.log2(real_genes.loc['means'] + 1),
+                     np.log2(sim_means+1), alpha=alpha)
+    lims = [
+        np.min([ax[0][1].get_xlim(), ax[0][1].get_ylim()]),
+        np.max([ax[0][1].get_xlim(), ax[0][1].get_ylim()]),
+    ]
+    ax[0][1].plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+#     b1 = ax[0][1].boxplot(data, labels=[real_name, "simulated"])
 
     # variance
     ax[0][2].set_title("gene expr. variance")
