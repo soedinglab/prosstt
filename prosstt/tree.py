@@ -80,7 +80,7 @@ class Tree(object):
             self.density = density
 
     @staticmethod
-    def gen_random_topology(branch_points):
+    def gen_random_topology(branch_points, branch_names=None):
         """
         Generates a random topology for a lineage tree. At every branch point
         a bifurcation is taking place.
@@ -89,17 +89,24 @@ class Tree(object):
         ----------
         branch_points: int
             The number of branch points in the topology
+        branch_names: array
+            The names of the branches. If empty, [0, branch_points - 1] will be
+            used.
         """
         total_branches = 2 * branch_points + 1
         seeds = [0]
         avail = list(reversed(range(1, total_branches)))
+        if branch_names is None:
+            branch_names = np.arange(total_branches)
         res = []
         while avail:
             root = np.random.choice(seeds)
             branch_a = avail.pop()
             branch_b = avail.pop()
-            res.append([root, branch_a])
-            res.append([root, branch_b])
+            res.append([branch_names[root],
+                        branch_names[branch_a]])
+            res.append([branch_names[root],
+                        branch_names[branch_b]])
             seeds.append(branch_a)
             seeds.append(branch_b)
             seeds.remove(root)
@@ -123,9 +130,10 @@ class Tree(object):
         """
         Generate a random binary tree topology given a number of branch points.
         """
-        topology = Tree.gen_random_topology(branch_points)
-        branches = len(np.unique(topology))
-        return cls(topology, time, branches, branch_points, modules, genes)
+        topology = Tree.gen_random_topology(branch_points,
+                                            branch_names=list(time.keys()))
+        num_branches = len(np.unique(topology))
+        return cls(topology, time, num_branches, branch_points, modules, genes)
 
     def default_density(self):
         """
