@@ -104,7 +104,7 @@ def diffusion(steps):
     velocity = np.zeros(steps)
     walk = np.zeros(steps)
 
-    walk[0] = np.log(sp.stats.uniform.rvs())
+    walk[0] = np.log(sp.stats.uniform.rvs(0, 1.5))
     # walk[0] = 0
     velocity[0] = sp.stats.norm.rvs(loc=0, scale=0.2)
 
@@ -264,6 +264,8 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
     for branch in bfs:
         programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
         programs[branch] = sut.adjust_to_parent(programs, branch, topology)
+        # below 10e-15 there are really not that many differences
+        # programs[branch][programs[branch] < -15]  = -15
         rel_means[branch] = np.dot(programs[branch], coefficients)
         above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
         parallels = sut.find_parallel(tree, programs, branch)
@@ -272,6 +274,8 @@ def simulate_lineage(tree, rel_exp_cutoff=8, intra_branch_tol=0.5,
             # Tracer()()
             programs[branch] = sim_expr_branch(tree.time[branch], tree.modules, cutoff=intra_branch_tol)
             programs[branch] = sut.adjust_to_parent(programs, branch, topology)
+            # below 10e-15 there are really not that many differences (same as above)
+            # programs[branch][programs[branch] < -15]  = -15
             rel_means[branch] = np.dot(programs[branch], coefficients)
             above_cutoff = (np.max(rel_means[branch]) > rel_exp_cutoff)
             parallels = sut.find_parallel(tree, programs, branch)
