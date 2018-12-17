@@ -684,10 +684,4 @@ def learn_data_summary(cell_stats, gene_stats, relative_means):
     # print(proposed_means.shape, avg_relative_expr.shape, np.sum(nonzero))
     proposed_means = proposed_means / avg_relative_expr
 
-    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]), np.array(proposed_means)
-
-
-def learn_data_variance(gene_stats, proposed_means, alpha_mean, beta_mean,
-                        alpha_var=1.5, beta_var=1.5):
-    print("hello world")
-
+    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]-1), np.array(proposed_means)
