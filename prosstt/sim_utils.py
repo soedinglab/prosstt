@@ -252,6 +252,25 @@ def diverging_parallel(branches, programs, genes, tol=0.5):
     return diverging
 
 
+def commited_branches(tree, branches, rel_means):
+    b1, b2 = branches
+    timezones = tree.populate_timezone()
+    assignments = assign_branches(tree.branch_times(), timezones)
+    matches = [a == branches for a in assignments.values()]
+    matches = np.min(np.where(matches))
+    offsets = np.array([tree.branch_times()[branch][0] for branch in branches])
+    mix = np.array(timezones[matches]) - offsets
+    mix_range = np.arange(mix[0], mix[1] + 1)
+    component_other = np.arange(0, 0.5, 1 / (2 * len(mix_range)))[::-1]
+    component_self = 1 - component_other
+    rel_means[b1] = ((component_self * rel_means[b1][mix_range].transpose()) +
+                     (component_other * rel_means[b2][mix_range].transpose())).transpose()
+
+    rel_means[b2] = ((component_self * rel_means[b2][mix_range].transpose()) +
+                     (component_other * rel_means[b1][mix_range].transpose())).transpose()
+    return rel_means
+
+
 def assign_branches(branch_times, timezone):
     """
     Assigns a branch to every timezone::
@@ -338,7 +357,8 @@ def pick_branches(tree, pseudotime):
     """
     timezone = tree.populate_timezone()
     assignments = assign_branches(tree.branch_times(), timezone)
-    branches = np.zeros(len(pseudotime), dtype=str)
+    branch_type = type(tree.branches[0])
+    branches = np.zeros(len(pseudotime), dtype=branch_type)
     for n, t in enumerate(pseudotime):
         branches[n] = pick_branch(tree, t, timezone, assignments)
     return branches
@@ -450,7 +470,7 @@ def simulate_base_gene_exp(tree, relative_means, abs_max=5000, gene_mean=0.8, ge
     return base_gene_exp
 
 
-def calc_scalings(cells, scale=True, scale_v=0.7):
+def calc_scalings(cells, scale=True, scale_mean=0, scale_v=0.7):
     """
     Obtain library size factors for each cell.
 
@@ -460,9 +480,11 @@ def calc_scalings(cells, scale=True, scale_v=0.7):
         The number of cells
     scale: bool, optional
         Whether to simulate different scaling factors for each cell
+    scale_mean: float, optional
+        The mean of the log-normal library size distribution
     scale_v: float, optional
         The standard deviation of the library size distribution (log-normal
-        distribution around 0)
+        distribution)
 
     Returns
     -------
@@ -470,7 +492,7 @@ def calc_scalings(cells, scale=True, scale_v=0.7):
         A library size factor for each cell
     """
     if scale:
-        scalings = np.exp(sp.stats.norm.rvs(loc=0., scale=scale_v, size=cells))
+        scalings = np.exp(sp.stats.norm.rvs(loc=scale_mean, scale=scale_v, size=cells))
     else:
         scalings = np.ones(cells)
     return scalings
@@ -643,3 +665,55 @@ def find_parallel(tree, programs, branch):
         if branch in parallels:
             return np.intersect1d(parallels, list(programs.keys()))
     return [branch, None]
+
+
+def learn_data_summary(cell_stats, gene_stats, relative_means):
+    """
+    Learns hyperparameters from gene and cell summaries of a real dataset. The
+    simulated dataset with these hyperparameters will have similar summary
+    statistics with the input dataset.
+
+    Parameters
+    ----------
+    cell_stats: Series
+        Each column is a cell. Contains at minimum the rows:
+        - "total": sum of all UMIs in each cell.
+        - "zeros": count of genes with 0 reported UMIs in each cell.
+    gene_stats: Series
+        Each column is a gene. Contains at minimum the rows:
+        - "means": average expression of each gene over the dataset
+        - "var": variance of each gene over the dataset
+        - "zeros": count of cells with 0 reported UMIs for each gene
+    relative_means: Series
+        Relative mean expression for all genes on every lineage tree branch
+
+    Returns
+    -------
+    scale parameters
+        Mean and variance of the library size distribution
+    average alpha
+        The average alpha hyperparameter for gene variance
+    average beta
+        The average beta hyperparameter for gene variance
+    proposed mean expression
+        The proposed base expression for each gene
+    """
+    real_scalings = np.log(cell_stats.loc["total"] / np.mean(cell_stats.loc["total"]))
+    scale_mean = np.mean(real_scalings)
+    scale_var = np.sqrt(np.var(real_scalings))
+
+    nonzero = (gene_stats.loc['var'] > 0) & (gene_stats.loc['means'] > 0)
+    fit = np.polyfit(x=gene_stats.loc['means'][nonzero],
+                     y=gene_stats.loc['var'][nonzero],
+                     deg=2,
+                     w=1 / gene_stats.loc['var'][nonzero])
+
+    rel_expr = np.array([relative_means[b] for b in relative_means.index])
+    avg_relative_expr = np.mean(np.mean(np.exp(rel_expr), axis=1), axis=0)
+    proposed_means = gene_stats.loc['means'][nonzero]
+    avg_relative_expr[avg_relative_expr < np.min(proposed_means)] = np.min(proposed_means)
+    # print(np.min(proposed_means))
+    # print(proposed_means.shape, avg_relative_expr.shape, np.sum(nonzero))
+    proposed_means = proposed_means / avg_relative_expr
+
+    return [scale_mean, scale_var], np.log(fit[0]), np.log(fit[1]-1), np.array(proposed_means)

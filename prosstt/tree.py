@@ -12,9 +12,9 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import newick
-from prosstt import tree_utils as tu
-from prosstt import simulation as sim
-from prosstt import sim_utils as sut
+import tree_utils as tu
+import simulation as sim
+import sim_utils as sut
 
 class Tree(object):
     """
@@ -164,7 +164,7 @@ class Tree(object):
         ----------
         relative_means: dict
             A dictionary of tables that contain relative gene expression for
-            each pseudotime point of every branch (ndarray
+            each pseudotime point of every branch in log space (ndarray
             relative_expression[b] has the dimensions time[b], G)
         base_gene_expr: ndarray
             Contains the base gene expression values for each gene.
@@ -184,7 +184,7 @@ class Tree(object):
         ----------
         average_expression: dict
             A dictionary of tables that contain average gene expression for
-            each pseudotime point of every branch (ndarray
+            each pseudotime point of every branch in log space (ndarray
             average_expression[b] has the dimensions time[b], G)
         """
         # sanity check of dimensions so that in case a user messes up there is
@@ -204,6 +204,7 @@ class Tree(object):
 
         self.means = average_expression
 
+
     def set_density(self, density):
         """
         Sets the density as a function of the pseudotime and the branching. If
@@ -216,17 +217,44 @@ class Tree(object):
             The density of each branch. For each branch b, len(density[b]) must
             equal tree.time[b].
         """
-        if not len(density) == self.branches:
+        if not len(density) == len(self.branches):
             msg = "The number of arrays in density must be equal to the number \
                   of branches in the topology"
             raise ValueError(msg)
-        for i, branch_density in enumerate(density):
-            if not len(branch_density) == self.time[i]:
-                msg = "Branch " + str(i) + " was expected to have a length " \
-                      + str((self.time[i], self.G)) + " and instead is " \
-                      + str(branch_density.shape)
+        for b in density:
+            if not len(density[b]) == self.time[b]:
+                msg = "Branch " + str(b) + " was expected to have a length " \
+                      + str((self.time[b], self.G)) + " and instead is " \
+                      + str(density[b].shape)
                 raise ValueError(msg)
         self.density = density
+
+    
+    def set_velocity(self, velocity):
+        """
+        Sets the velocity with which the cells move through the tree. It is the
+        reverse of the density.
+
+        Parameters
+        ----------
+        velocity: dict
+            The velocity of each branch. For each branch b, len(velocity[b])
+            must be equal to self.time[b].
+        """
+        if not len(velocity) == len(self.branches):
+            msg = "The number of arrays in velocity must be equal to the \
+                   number of branches in the topology"
+            raise ValueError(msg)
+        for b in velocity:
+            if not len(velocity[b]) == self.time[b]:
+                msg = "Branch " + str(b) + " was expected to have a length " \
+                      + str((self.time[b], self.G)) + " and instead is " \
+                      + str(velocity[b].shape)
+                raise ValueError(msg)
+        velocity = tu.sanitize_velocity(velocity)
+        density = tu._density_from_velocity(velocity)
+        self.density = density
+
 
     def get_max_time(self):
         """
