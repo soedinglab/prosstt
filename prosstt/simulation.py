@@ -14,8 +14,8 @@ from numpy import random
 import pandas as pd
 import scipy as sp
 
-import sim_utils as sut
-import count_model as cm
+from prosstt import sim_utils as sut
+from prosstt import count_model as cm
 
 
 def sim_expr_branch(branch_length, expr_progr, cutoff=0.2, max_loops=100):

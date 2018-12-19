@@ -12,9 +12,9 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import newick
-import tree_utils as tu
-import simulation as sim
-import sim_utils as sut
+from prosstt import tree_utils as tu
+from prosstt import simulation as sim
+from prosstt import sim_utils as sut
 
 class Tree(object):
     """
