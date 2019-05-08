@@ -90,8 +90,8 @@ class Tree(object):
         branch_points: int
             The number of branch points in the topology
         branch_names: array
-            The names of the branches. If empty, [0, branch_points - 1] will be
-            used.
+            The names of the branches. If empty, the range [0, branch_points-1]
+            will be used.
         """
         total_branches = 2 * branch_points + 1
         seeds = [0]

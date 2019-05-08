@@ -658,7 +658,7 @@ def add_non_diff_genes(inform_expr_matrix, genes, gene_params, cell_scalings):
     r_total = np.zeros(N * genes)
 
     for cell in range(N):
-        mu_cell = cell_scalings[cell] * gene_params["base_expr"][cell]
+        mu_cell = cell_scalings[cell] * gene_params["base_expr"]
         p, r = cm.get_pr_umi(a=gene_params["alpha"],
                              b=gene_params["beta"],
                              m=mu_cell)
