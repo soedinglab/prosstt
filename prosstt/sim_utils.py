@@ -587,6 +587,8 @@ def bfs_finder(graph, start):
     Originally answered by StackOverflow user https://stackoverflow.com/users/2988730
     for question https://stackoverflow.com/questions/50589804.
     """
+    if graph.shape == (2, ):
+        graph = graph.reshape((1, 2))
     sorter = np.argsort(graph[:, 0])
     done = set()
     todo = deque([start])
