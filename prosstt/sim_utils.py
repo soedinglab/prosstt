@@ -526,12 +526,12 @@ def process_timeseries_input(series_points, cells, point_std):
         The cell density at each sample point of the time series experiment
     """
     no_samples = len(series_points)
-    if isinstance(cells, collections.Iterable):
+    if isinstance(cells, collections.abc.Iterable):
         cells = np.array(cells, dtype=int)
     elif isinstance(cells, numbers.Number):
         cells = np.array([cells / no_samples] * no_samples, dtype=int)
 
-    if isinstance(point_std, collections.Iterable):
+    if isinstance(point_std, collections.abc.Iterable):
         point_std = np.array(point_std, dtype=float)
     elif isinstance(point_std, numbers.Number):
         point_std = np.array([point_std / no_samples] * no_samples, dtype=float)
