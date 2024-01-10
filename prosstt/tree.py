@@ -147,7 +147,7 @@ class Tree(object):
             total_time += branch_time
 
         for k in self.time.keys():
-            density[k] = np.array([1. / total_time] * np.int(self.time[k]))
+            density[k] = np.array([1. / total_time] * int(self.time[k]))
         return density
 
 

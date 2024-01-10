@@ -42,7 +42,7 @@ def parse_newick(newick_tree, def_time):
         if node.length == 0:
             time.update({node.name: def_time})
         else:
-            time.update({node.name: np.int(node.length)})
+            time.update({node.name: int(node.length)})
 
         if not node.descendants:
             continue
